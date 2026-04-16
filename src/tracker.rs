@@ -126,7 +126,7 @@ pub async fn run_track(
         match handle.await {
             Ok(Ok(response)) => {
                 let parsed = match judge_ref {
-                    Some(j) => parser::parse_with_judge(domain, &response, j).await,
+                    Some(j) => parser::parse_with_judge(domain, &response, j.as_ref()).await,
                     None => parser::parse_response(domain, &response),
                 };
                 let n = done.fetch_add(1, Ordering::SeqCst) + 1;
