@@ -14,7 +14,10 @@ pub struct AnthropicProvider {
 impl AnthropicProvider {
     pub fn new(config: ProviderConfig) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(std::time::Duration::from_secs(config.timeout_secs))
+                .build()
+                .unwrap_or_default(),
             config,
         }
     }
@@ -26,13 +29,16 @@ impl LlmProvider for AnthropicProvider {
         "anthropic"
     }
 
-    async fn query(&self, prompt: &str) -> Result<String> {
-        let body = json!({
+    async fn query_with_system(&self, system: Option<&str>, prompt: &str) -> Result<String> {
+        let mut body = json!({
             "model": self.config.model,
             "max_tokens": 1024,
             "temperature": self.config.temperature,
             "messages": [{"role": "user", "content": prompt}]
         });
+        if let Some(sys) = system {
+            body["system"] = json!(sys);
+        }
 
         let resp = self
             .client
@@ -45,7 +51,7 @@ impl LlmProvider for AnthropicProvider {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let text = resp.text().await?;
+            let text = resp.text().await.unwrap_or_default();
             bail!("Anthropic error {}: {}", status, text);
         }
 
