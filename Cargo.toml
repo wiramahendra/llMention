@@ -2,8 +2,12 @@
 name = "llmention"
 version = "0.1.0"
 edition = "2021"
-description = "Google Analytics for AI citations — track when LLMs mention your brand"
+description = "Track how often LLMs mention your brand — local-first, private, fast"
 license = "MIT"
+keywords = ["geo", "llm", "visibility", "cli", "rust"]
+categories = ["command-line-utilities", "web-programming"]
+repository = "https://github.com/schlep-engine/llmention"
+readme = "README.md"
 
 [[bin]]
 name = "llmention"
