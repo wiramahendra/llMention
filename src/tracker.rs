@@ -55,32 +55,53 @@ pub fn build_providers_filtered(
     }
 }
 
+pub struct TrackOptions {
+    pub verbose: bool,
+    pub concurrency: usize,
+}
+
+impl Default for TrackOptions {
+    fn default() -> Self {
+        Self {
+            verbose: false,
+            concurrency: 5,
+        }
+    }
+}
+
 pub async fn run_track(
     domain: &str,
     prompts: Vec<String>,
     providers: Vec<Arc<dyn LlmProvider>>,
     storage: &Storage,
     cache: &Cache,
+    opts: TrackOptions,
 ) -> Result<TrackSummary> {
-    let sem = Arc::new(Semaphore::new(4));
+    let sem = Arc::new(Semaphore::new(opts.concurrency));
 
-    // Separate cache hits from live queries
     let mut results: Vec<MentionResult> = Vec::new();
-    let mut handles: Vec<tokio::task::JoinHandle<Result<(String, String, String, String)>>> =
-        Vec::new();
+    let mut handles: Vec<(
+        String,
+        String,
+        tokio::task::JoinHandle<Result<String>>,
+    )> = Vec::new();
 
     for provider in &providers {
         for prompt in &prompts {
             let model = provider.name().to_string();
 
-            if let Some(cached) = cache.get(&model, prompt) {
+            if let Some(cached) = cache.get(domain, &model, prompt) {
                 let parsed = parser::parse_response(domain, &cached);
+                let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
                 eprintln!(
                     "  {} [cached] [{}] {}",
-                    "✓".green(),
+                    icon,
                     model.cyan(),
                     prompt.dimmed()
                 );
+                if opts.verbose {
+                    eprintln!("    {}", cached.lines().next().unwrap_or("").dimmed());
+                }
                 results.push(MentionResult {
                     domain: domain.to_string(),
                     prompt: prompt.clone(),
@@ -97,27 +118,26 @@ pub async fn run_track(
             }
 
             let provider = Arc::clone(provider);
-            let prompt = prompt.clone();
+            let prompt_clone = prompt.clone();
             let sem = Arc::clone(&sem);
-            handles.push(tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let _permit = sem.acquire().await.unwrap();
-                let response = provider.query(&prompt).await?;
-                Ok((model, prompt, response, String::new()))
-            }));
+                provider.query(&prompt_clone).await
+            });
+            handles.push((model, prompt.clone(), handle));
         }
     }
 
-    for handle in handles {
-        match handle.await? {
-            Ok((model, prompt, response, _)) => {
+    for (model, prompt, handle) in handles {
+        match handle.await {
+            Ok(Ok(response)) => {
                 let parsed = parser::parse_response(domain, &response);
-                let icon = if parsed.mentioned {
-                    "✓".green()
-                } else {
-                    "–".dimmed()
-                };
+                let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
                 eprintln!("  {} [{}] {}", icon, model.cyan(), prompt.dimmed());
-                let _ = cache.set(&model, &prompt, &response);
+                if opts.verbose {
+                    eprintln!("    {}", response.lines().next().unwrap_or("").dimmed());
+                }
+                let _ = cache.set(domain, &model, &prompt, &response);
                 results.push(MentionResult {
                     domain: domain.to_string(),
                     prompt,
@@ -131,7 +151,13 @@ pub async fn run_track(
                     raw_response: response,
                 });
             }
-            Err(e) => eprintln!("  {} query failed: {}", "✗".red(), e),
+            Ok(Err(e)) => {
+                // Graceful fallback: log the error and continue with other providers
+                eprintln!("  {} [{}] {}", "✗".red(), model.cyan(), e.to_string().yellow());
+            }
+            Err(e) => {
+                eprintln!("  {} [{}] task panicked: {}", "✗".red(), model.cyan(), e);
+            }
         }
     }
 
