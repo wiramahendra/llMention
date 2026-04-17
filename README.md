@@ -38,7 +38,7 @@ Run `llmention audit myproject.com` weekly and instantly see:
 
 ```bash
 # 1. Install
-cargo install --git https://github.com/schlep-engine/llmention
+cargo install --git https://github.com/wiramahendra/llMention
 
 # 2. Create config
 llmention config
@@ -209,12 +209,12 @@ concurrency = 5    # max parallel API calls
 
 **Cargo (recommended):**
 ```bash
-cargo install --git https://github.com/schlep-engine/llmention
+cargo install --git https://github.com/wiramahendra/llMention
 ```
 
 **From source:**
 ```bash
-git clone https://github.com/schlep-engine/llmention
+git clone https://github.com/wiramahendra/llMention
 cd llmention
 cargo build --release
 # Binary at target/release/llmention (9.6 MB)
