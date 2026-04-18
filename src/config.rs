@@ -18,6 +18,7 @@ pub struct ProvidersConfig {
     pub openai: Option<ProviderConfig>,
     pub anthropic: Option<ProviderConfig>,
     pub xai: Option<ProviderConfig>,
+    pub perplexity: Option<ProviderConfig>,
     pub ollama: Option<OllamaConfig>,
 }
 
@@ -145,6 +146,12 @@ temperature = 0
 api_key     = "xai-..."
 model       = "grok-2-latest"
 enabled     = false
+temperature = 0
+
+[providers.perplexity]
+api_key   = "pplx-..."
+model     = "sonar"
+enabled   = false
 temperature = 0
 
 # Local model via Ollama — no API key needed.
