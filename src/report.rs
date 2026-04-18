@@ -292,3 +292,85 @@ fn sentiment_cell(s: &Sentiment) -> Cell {
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max - 1]) }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use crate::types::{Position, Sentiment};
+
+    fn make_result(mentioned: bool, cited: bool) -> MentionResult {
+        MentionResult {
+            domain: "myproject.com".into(),
+            prompt: "what is myproject".into(),
+            model: "openai".into(),
+            timestamp: Utc::now(),
+            mentioned,
+            cited,
+            position: if mentioned { Position::Top } else { Position::NotMentioned },
+            sentiment: if mentioned { Sentiment::Positive } else { Sentiment::Unknown },
+            snippet: None,
+            raw_response: "test response".into(),
+        }
+    }
+
+    #[test]
+    fn csv_has_header() {
+        let csv = export_csv(&[make_result(true, false)]);
+        assert!(csv.starts_with("model,prompt,mentioned,cited,position,sentiment,timestamp\n"));
+    }
+
+    #[test]
+    fn csv_row_count() {
+        let csv = export_csv(&[make_result(true, true), make_result(false, false)]);
+        assert_eq!(csv.lines().count(), 3); // header + 2 data rows
+    }
+
+    #[test]
+    fn csv_escapes_commas_in_prompt() {
+        let mut r = make_result(true, false);
+        r.prompt = "best tool, for devs".into();
+        let csv = export_csv(&[r]);
+        assert!(csv.contains("\"best tool, for devs\""));
+    }
+
+    #[test]
+    fn csv_escapes_quotes_in_prompt() {
+        let mut r = make_result(true, false);
+        r.prompt = r#"what is "myproject""#.into();
+        let csv = export_csv(&[r]);
+        assert!(csv.contains("\"\""));
+    }
+
+    #[test]
+    fn markdown_contains_domain_heading() {
+        let md = export_markdown(&[make_result(true, false)], "myproject.com");
+        assert!(md.contains("myproject.com"));
+        assert!(md.contains("| Model |"));
+    }
+
+    #[test]
+    fn markdown_row_per_result() {
+        let md = export_markdown(
+            &[make_result(true, true), make_result(false, false)],
+            "myproject.com",
+        );
+        // header + separator + 2 data rows = 4 table lines
+        let table_lines = md.lines().filter(|l| l.starts_with('|')).count();
+        assert_eq!(table_lines, 4);
+    }
+
+    #[test]
+    fn truncate_long_string() {
+        let s = "a".repeat(60);
+        let t = truncate(&s, 44);
+        assert!(t.len() <= 44 + 3); // '…' is multibyte
+        assert!(t.ends_with('…'));
+    }
+
+    #[test]
+    fn truncate_short_string_unchanged() {
+        let s = "short";
+        assert_eq!(truncate(s, 44), "short");
+    }
+}
