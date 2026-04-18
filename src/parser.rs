@@ -128,8 +128,10 @@ fn detect_position(domain_base: &str, response_lower: &str) -> Position {
 }
 
 fn detect_sentiment(domain_base: &str, response_lower: &str) -> Sentiment {
+    // Split on sentence boundaries but NOT on '.' — domain names contain dots
+    // and splitting there breaks context around "myproject.com is great".
     let relevant: Vec<&str> = response_lower
-        .split(['.', '!', '?', '\n'])
+        .split(['!', '?', '\n'])
         .filter(|s| s.contains(domain_base))
         .collect();
 
@@ -158,6 +160,100 @@ fn detect_sentiment(domain_base: &str, response_lower: &str) -> Sentiment {
         std::cmp::Ordering::Greater => Sentiment::Positive,
         std::cmp::Ordering::Less => Sentiment::Negative,
         std::cmp::Ordering::Equal => Sentiment::Neutral,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Position, Sentiment};
+
+    #[test]
+    fn detects_exact_domain() {
+        let r = parse_response("myproject.com", "I recommend myproject.com for this use case.");
+        assert!(r.mentioned);
+        assert!(!r.cited);
+        assert_eq!(r.position, Position::Top);
+    }
+
+    #[test]
+    fn detects_base_without_tld() {
+        let r = parse_response("myproject.com", "myproject is a great tool for developers.");
+        assert!(r.mentioned);
+    }
+
+    #[test]
+    fn not_mentioned() {
+        let r = parse_response("myproject.com", "I recommend using ripgrep instead.");
+        assert!(!r.mentioned);
+        assert_eq!(r.position, Position::NotMentioned);
+        assert_eq!(r.sentiment, Sentiment::Unknown);
+        assert!(r.snippet.is_none());
+    }
+
+    #[test]
+    fn detects_markdown_citation() {
+        let r = parse_response(
+            "myproject.com",
+            "Check [myproject](https://myproject.com) for details.",
+        );
+        assert!(r.mentioned);
+        assert!(r.cited);
+    }
+
+    #[test]
+    fn detects_plain_url_citation() {
+        let r = parse_response("myproject.com", "Visit https://myproject.com to install.");
+        assert!(r.mentioned);
+        assert!(r.cited);
+    }
+
+    #[test]
+    fn positive_sentiment() {
+        let r = parse_response(
+            "myproject.com",
+            "myproject.com is excellent and widely used by developers.",
+        );
+        assert!(r.mentioned);
+        assert_eq!(r.sentiment, Sentiment::Positive);
+    }
+
+    #[test]
+    fn negative_sentiment() {
+        let r = parse_response(
+            "myproject.com",
+            "I would avoid myproject.com — it is deprecated and abandoned.",
+        );
+        assert!(r.mentioned);
+        assert_eq!(r.sentiment, Sentiment::Negative);
+    }
+
+    #[test]
+    fn position_top() {
+        let r = parse_response("myproject.com", "myproject.com leads the market. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.");
+        assert_eq!(r.position, Position::Top);
+    }
+
+    #[test]
+    fn position_bottom() {
+        let filler = "lorem ipsum dolor sit amet ".repeat(20);
+        let r = parse_response("myproject.com", &format!("{}myproject.com", filler));
+        assert!(r.mentioned);
+        assert_eq!(r.position, Position::Bottom);
+    }
+
+    #[test]
+    fn snippet_is_extracted() {
+        let r = parse_response("myproject.com", "You should try myproject.com today.");
+        assert!(r.snippet.is_some());
+        let s = r.snippet.unwrap();
+        assert!(s.contains("myproject"));
+    }
+
+    #[test]
+    fn case_insensitive_detection() {
+        let r = parse_response("myproject.com", "MYPROJECT.COM is well known.");
+        assert!(r.mentioned);
     }
 }
 
