@@ -2,7 +2,6 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
-[![Crates.io](https://img.shields.io/crates/v/llmention.svg)](https://crates.io/crates/llmention)
 
 **Know exactly when and where LLMs mention your brand — local-first, private, no SaaS.**
 
@@ -174,6 +173,12 @@ temperature = 0
 api_key     = "xai-..."
 model       = "grok-2-latest"
 enabled     = false
+
+[providers.perplexity]
+api_key     = "pplx-..."
+model       = "sonar"            # sonar-pro for deeper web-grounded answers
+enabled     = false
+temperature = 0
 
 # Local, free, unlimited — install: https://ollama.com
 [providers.ollama]
