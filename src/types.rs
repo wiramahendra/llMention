@@ -71,3 +71,50 @@ impl TrackSummary {
         self.mention_count as f64 / self.total_queries as f64 * 100.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn position_display() {
+        assert_eq!(Position::Top.to_string(), "Top");
+        assert_eq!(Position::Middle.to_string(), "Middle");
+        assert_eq!(Position::Bottom.to_string(), "Bottom");
+        assert_eq!(Position::NotMentioned.to_string(), "—");
+    }
+
+    #[test]
+    fn sentiment_display() {
+        assert_eq!(Sentiment::Positive.to_string(), "Positive");
+        assert_eq!(Sentiment::Neutral.to_string(), "Neutral");
+        assert_eq!(Sentiment::Negative.to_string(), "Negative");
+        assert_eq!(Sentiment::Unknown.to_string(), "—");
+    }
+
+    #[test]
+    fn mention_rate_zero_queries() {
+        let s = TrackSummary {
+            domain: "x.com".into(),
+            total_queries: 0,
+            mention_count: 0,
+            citation_count: 0,
+            models_with_mention: vec![],
+            results: vec![],
+        };
+        assert_eq!(s.mention_rate(), 0.0);
+    }
+
+    #[test]
+    fn mention_rate_calculation() {
+        let s = TrackSummary {
+            domain: "x.com".into(),
+            total_queries: 4,
+            mention_count: 3,
+            citation_count: 1,
+            models_with_mention: vec![],
+            results: vec![],
+        };
+        assert!((s.mention_rate() - 75.0).abs() < 0.01);
+    }
+}
