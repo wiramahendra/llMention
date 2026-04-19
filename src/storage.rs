@@ -1,9 +1,20 @@
 use anyhow::Result;
 use chrono::Utc;
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::types::{MentionResult, Position, Sentiment};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Project {
+    pub id: i64,
+    pub domain: String,
+    pub niche: Option<String>,
+    pub notes: Option<String>,
+    pub last_audited: Option<String>,
+    pub created_at: String,
+}
 
 pub struct Storage {
     conn: Connection,
@@ -27,7 +38,15 @@ impl Storage {
                 snippet      TEXT,
                 raw_response TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_domain_ts ON mentions(domain, timestamp);",
+            CREATE INDEX IF NOT EXISTS idx_domain_ts ON mentions(domain, timestamp);
+            CREATE TABLE IF NOT EXISTS projects (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain       TEXT NOT NULL UNIQUE,
+                niche        TEXT,
+                notes        TEXT,
+                last_audited TEXT,
+                created_at   TEXT NOT NULL
+            );",
         )?;
         Ok(Self { conn })
     }
@@ -137,6 +156,64 @@ impl Storage {
             }
         }
         Ok(None)
+    }
+
+    // ── Project management ───────────────────────────────────────────────────
+
+    pub fn upsert_project(
+        &self,
+        domain: &str,
+        niche: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO projects (domain, niche, notes, created_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(domain) DO UPDATE SET
+               niche = COALESCE(?2, niche),
+               notes = COALESCE(?3, notes)",
+            params![domain, niche, notes, Utc::now().to_rfc3339()],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_projects(&self) -> Result<Vec<Project>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, domain, niche, notes, last_audited, created_at
+             FROM projects ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                domain: row.get(1)?,
+                niche: row.get(2)?,
+                notes: row.get(3)?,
+                last_audited: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        let mut projects = Vec::new();
+        for p in rows {
+            projects.push(p?);
+        }
+        Ok(projects)
+    }
+
+    pub fn remove_project(&self, domain: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM projects WHERE domain = ?1",
+            params![domain],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Update last_audited timestamp for a project, if it exists. No-op otherwise.
+    pub fn touch_project_last_audited(&self, domain: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE projects SET last_audited = ?1 WHERE domain = ?2",
+            params![Utc::now().to_rfc3339(), domain],
+        )?;
+        Ok(())
     }
 
     /// Deletes records older than `days` days. Returns number of rows deleted.
