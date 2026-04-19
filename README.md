@@ -491,7 +491,9 @@ PRs welcome.
 | 3 | `projects`, `watch`, `--quiet`, desktop app skeleton | ✅ Done |
 | 4 | `prompts`, `plugins`, `share`, `stats`, `docs` | ✅ Done |
 | 4 | Plugin system + community template marketplace | ✅ Done |
-| 5 | Self-hosted web dashboard | Planned |
+| 5 | `quickstart`, launch polish, EXAMPLES.md | ✅ Done |
+| 6 | Self-hosted web dashboard | Planned |
+| 6 | Community prompt registry (web-hosted) | Planned |
 
 ---
 
