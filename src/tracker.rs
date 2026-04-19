@@ -69,11 +69,13 @@ pub struct TrackOptions {
     pub concurrency: usize,
     /// When Some, re-evaluate each response through the LLM-as-judge for accuracy.
     pub judge: Option<Arc<dyn LlmProvider>>,
+    /// Suppress per-query progress output (for CI / watch mode summary lines).
+    pub quiet: bool,
 }
 
 impl Default for TrackOptions {
     fn default() -> Self {
-        Self { verbose: false, concurrency: 5, judge: None }
+        Self { verbose: false, concurrency: 5, judge: None, quiet: false }
     }
 }
 
@@ -100,10 +102,12 @@ pub async fn run_track(
             if let Some(cached) = cache.get(domain, &model, prompt) {
                 let n = done.fetch_add(1, Ordering::SeqCst) + 1;
                 let parsed = parser::parse_response(domain, &cached);
-                let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
-                eprintln!("  {} [{:>3}/{}] [cached] [{}] {}", icon, n, total, model.cyan(), prompt.dimmed());
-                if opts.verbose {
-                    eprintln!("          {}", first_line(&cached).dimmed());
+                if !opts.quiet {
+                    let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
+                    eprintln!("  {} [{:>3}/{}] [cached] [{}] {}", icon, n, total, model.cyan(), prompt.dimmed());
+                    if opts.verbose {
+                        eprintln!("          {}", first_line(&cached).dimmed());
+                    }
                 }
                 results.push(make_result(domain, prompt, &model, cached, parsed));
                 continue;
@@ -133,11 +137,13 @@ pub async fn run_track(
                     None => parser::parse_response(domain, &response),
                 };
                 let n = done.fetch_add(1, Ordering::SeqCst) + 1;
-                let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
-                let judge_tag = if judge_ref.is_some() { " [judge]" } else { "" };
-                eprintln!("  {} [{:>3}/{}] [{}{}] {}", icon, n, total, model.cyan(), judge_tag.dimmed(), prompt.dimmed());
-                if opts.verbose {
-                    eprintln!("          {}", first_line(&response).dimmed());
+                if !opts.quiet {
+                    let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
+                    let judge_tag = if judge_ref.is_some() { " [judge]" } else { "" };
+                    eprintln!("  {} [{:>3}/{}] [{}{}] {}", icon, n, total, model.cyan(), judge_tag.dimmed(), prompt.dimmed());
+                    if opts.verbose {
+                        eprintln!("          {}", first_line(&response).dimmed());
+                    }
                 }
                 let _ = cache.set(domain, &model, &prompt, &response);
                 results.push(make_result(domain, &prompt, &model, response, parsed));
