@@ -4,12 +4,13 @@ use colored::Colorize;
 use std::path::PathBuf;
 
 use llmention::{
+    agent::optimizer::{self, OptimizeOptions},
     cache::Cache,
     config::{Config, EXAMPLE_CONFIG},
     geo::{
         evaluator,
         generator::{self, GenerateOptions},
-        prompts::extract_domain_hint,
+        prompts::{self, extract_domain_hint},
     },
     report,
     storage::Storage,
@@ -111,6 +112,32 @@ enum Commands {
         /// Export as structured format instead of terminal table
         #[arg(long, value_enum)]
         export: Option<ExportFormat>,
+    },
+    /// Autonomous GEO agent: discover prompts, audit visibility, generate content, show lift
+    ///
+    /// Examples:
+    ///   llmention optimize igrisinertial.com --niche "deterministic edge runtime"
+    ///   llmention optimize myproject.com --niche "rust cli tool" --competitors "ripgrep,fd" --steps 5
+    ///   llmention optimize myproject.com --niche "..." --dry-run
+    ///   llmention optimize myproject.com --niche "..." --auto-apply
+    Optimize {
+        /// Domain or brand to optimize (e.g. myproject.com)
+        domain: String,
+        /// Main niche or product category (required for relevant content)
+        #[arg(long, short)]
+        niche: String,
+        /// Comma-separated list of competitors to benchmark against
+        #[arg(long, short)]
+        competitors: Option<String>,
+        /// Number of weak prompts to generate content for (default: 3)
+        #[arg(long, short, default_value = "3")]
+        steps: usize,
+        /// Show full plan and generated content without writing any files
+        #[arg(long)]
+        dry_run: bool,
+        /// Automatically write generated sections to ./geo/ folder
+        #[arg(long)]
+        auto_apply: bool,
     },
     /// Generate GEO-optimized markdown content for a target query
     ///
@@ -235,6 +262,81 @@ async fn main() -> Result<()> {
                     print!("{}", report::export_markdown(&results, &domain))
                 }
                 None => report::print_trend_report(&domain, &results, days),
+            }
+        }
+
+        Commands::Optimize { domain, niche, competitors, steps, dry_run, auto_apply } => {
+            let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
+            if providers.is_empty() {
+                no_providers_error();
+            }
+
+            let competitors_list: Vec<String> = competitors
+                .as_deref()
+                .unwrap_or("")
+                .split(',')
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string())
+                .collect();
+
+            println!(
+                "\n  {}  {}\n  {}  {}\n  {}  {} steps{}\n",
+                "Optimizing".bold(),
+                domain.cyan().bold(),
+                "Niche:".dimmed(),
+                niche.cyan(),
+                "Mode:".dimmed(),
+                steps,
+                if dry_run { "  [dry-run]".yellow().to_string() } else { String::new() }
+            );
+
+            let opts = OptimizeOptions {
+                domain: domain.clone(),
+                niche,
+                competitors: competitors_list,
+                steps,
+                dry_run,
+                verbose: cli.verbose,
+            };
+
+            let plan = optimizer::optimize(&opts, &providers, &storage, &cache).await?;
+
+            report::print_optimization_plan(&plan, dry_run);
+
+            if !dry_run && auto_apply && !plan.sections.is_empty() {
+                std::fs::create_dir_all("geo")?;
+                let mut written = 0usize;
+                for section in &plan.sections {
+                    let path = std::path::Path::new(&section.file_name);
+                    if let Some(parent) = path.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::write(path, &section.content)?;
+                    println!(
+                        "  {}  {}",
+                        "✓".green(),
+                        section.file_name.cyan()
+                    );
+                    written += 1;
+                }
+                println!(
+                    "\n  {} {} file(s) written to {}",
+                    "✓".green().bold(),
+                    written,
+                    "./geo/".cyan()
+                );
+                println!(
+                    "\n  {}  git add geo/ && git commit -m \"docs: add GEO-optimized content\"\n",
+                    "→".cyan()
+                );
+            } else if !dry_run && !auto_apply && !plan.sections.is_empty() {
+                println!(
+                    "  {}  Run with {} to write {} file(s) to {}\n",
+                    "Tip".yellow().bold(),
+                    "--auto-apply".cyan(),
+                    plan.sections.len(),
+                    "./geo/".cyan()
+                );
             }
         }
 
@@ -585,33 +687,5 @@ fn load_prompts(path: Option<PathBuf>, domain: &str) -> Result<Vec<String>> {
 }
 
 fn audit_prompts(domain: &str, niche: Option<&str>, competitor: Option<&str>) -> Vec<String> {
-    let brand = domain
-        .trim_end_matches(".com")
-        .trim_end_matches(".io")
-        .trim_end_matches(".dev")
-        .trim_end_matches(".app")
-        .trim_end_matches(".net")
-        .trim_end_matches(".org")
-        .trim_end_matches(".ai");
-
-    let niche = niche.unwrap_or("developer tool");
-    let comp = competitor.unwrap_or("similar tools");
-
-    let mut prompts = vec![
-        format!("what is {}", brand),
-        format!("best {} 2026", niche),
-        format!("{} review", brand),
-        format!("is {} open source", brand),
-        format!("how does {} work", brand),
-        format!("alternatives to {} for {}", comp, niche),
-        format!("who uses {}", brand),
-        format!("should I use {} for my project", brand),
-        format!("{} vs {}", brand, comp),
-        format!("getting started with {}", brand),
-        format!("pros and cons of {}", brand),
-        format!("is {} production ready", brand),
-    ];
-
-    prompts.dedup();
-    prompts
+    prompts::default_prompts(domain, niche, competitor)
 }
