@@ -263,6 +263,115 @@ pub fn export_csv(results: &[MentionResult]) -> String {
     out
 }
 
+pub fn print_optimization_plan(plan: &OptimizationPlan, dry_run: bool) {
+    println!();
+    println!("{}", "═".repeat(64).cyan());
+    println!(
+        "  {}  {}{}",
+        "Optimization Plan".bold(),
+        plan.domain.cyan().bold(),
+        if dry_run { "  [dry-run]".yellow().to_string() } else { String::new() }
+    );
+    println!("{}", "═".repeat(64).cyan());
+    println!();
+
+    let lift = plan.projected_lift();
+    let current_str = format!("{:.0}%", plan.current_mention_rate);
+    let current_colored = if plan.current_mention_rate >= 60.0 {
+        current_str.green().bold()
+    } else if plan.current_mention_rate >= 30.0 {
+        current_str.yellow().bold()
+    } else {
+        current_str.red().bold()
+    };
+
+    println!(
+        "  Current visibility    {}  ({} queries across {} topic(s))",
+        current_colored,
+        plan.total_audit_queries,
+        plan.discovered_prompts.len(),
+    );
+
+    if !plan.sections.is_empty() {
+        let lift_str = format!("+{:.0}pp", lift);
+        let avg_cit = format!("{:.0}%", plan.avg_citability());
+        println!(
+            "  Projected citability  {}  ({} on optimized topics)",
+            if lift >= 40.0 { avg_cit.green().bold() } else if lift >= 20.0 { avg_cit.yellow().bold() } else { avg_cit.red().bold() },
+            lift_str.green().bold()
+        );
+    }
+
+    println!();
+
+    if plan.sections.is_empty() {
+        println!("  {} No content was generated.\n", "!".yellow());
+        return;
+    }
+
+    let mut table = Table::new();
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec![
+        Cell::new("Prompt").add_attribute(Attribute::Bold),
+        Cell::new("Citability").add_attribute(Attribute::Bold),
+        Cell::new("File").add_attribute(Attribute::Bold),
+    ]);
+    for s in &plan.sections {
+        let rate_str = format!("{:.0}%", s.citability_rate);
+        let rate_cell = if s.citability_rate >= 70.0 {
+            Cell::new(format!("✓ {}", rate_str)).fg(Color::Green)
+        } else if s.citability_rate >= 40.0 {
+            Cell::new(format!("~ {}", rate_str)).fg(Color::Yellow)
+        } else {
+            Cell::new(format!("✗ {}", rate_str)).fg(Color::Red)
+        };
+        table.add_row(vec![
+            Cell::new(truncate(&s.prompt, 40)).fg(Color::Cyan),
+            rate_cell,
+            Cell::new(&s.file_name).fg(Color::DarkGrey),
+        ]);
+    }
+    println!("{table}");
+    println!();
+
+    if dry_run {
+        println!("  {}", "Generated content preview:".bold());
+        println!("{}", "─".repeat(64).dimmed());
+        for section in &plan.sections {
+            println!();
+            println!("  {}  {}", "──".dimmed(), section.prompt.cyan().bold());
+            println!("{}", "─".repeat(64).dimmed());
+            println!();
+            println!("{}", section.content);
+            println!();
+        }
+    } else {
+        println!("  {}", "Next steps:".bold());
+        let files: Vec<&str> = plan.sections.iter().map(|s| s.file_name.as_str()).collect();
+        let file_list = files.join(" ");
+        println!("  {}  Review content:  {}", "→".cyan(), format!("cat {}", files.first().copied().unwrap_or("geo/*.md")).dimmed());
+        println!(
+            "  {}  Commit:          {}",
+            "→".cyan(),
+            format!(
+                "git add {} && git commit -m \"docs: add GEO-optimized content\"",
+                file_list
+            )
+            .dimmed()
+        );
+        println!(
+            "  {}  Re-audit:        {}",
+            "→".cyan(),
+            format!(
+                "llmention audit {} --niche \"{}\"",
+                plan.domain, plan.niche
+            )
+            .dimmed()
+        );
+    }
+    println!();
+}
+
 pub fn print_generate_results(results: &[GenerateResult], user_prompt: &str) {
     println!();
     println!("{}", "━".repeat(64).dimmed());
