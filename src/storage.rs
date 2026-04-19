@@ -7,6 +7,14 @@ use std::path::PathBuf;
 use crate::types::{MentionResult, Position, Sentiment};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DomainDayStat {
+    pub day: String,
+    pub total: usize,
+    pub mentioned: usize,
+    pub cited: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: i64,
     pub domain: String,
@@ -214,6 +222,47 @@ impl Storage {
             params![Utc::now().to_rfc3339(), domain],
         )?;
         Ok(())
+    }
+
+    /// Returns all distinct domains tracked in the database.
+    pub fn list_domains(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT domain FROM mentions ORDER BY domain",
+        )?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut domains = Vec::new();
+        for row in rows {
+            domains.push(row?);
+        }
+        Ok(domains)
+    }
+
+    /// Returns per-day mention stats for a domain within the given number of days.
+    pub fn domain_stats(&self, domain: &str, days: u32) -> Result<Vec<DomainDayStat>> {
+        let since = Utc::now() - chrono::Duration::days(days as i64);
+        let mut stmt = self.conn.prepare(
+            "SELECT DATE(timestamp) as day,
+                    COUNT(*) as total,
+                    SUM(mentioned) as mentioned,
+                    SUM(cited) as cited
+             FROM mentions
+             WHERE domain = ?1 AND timestamp >= ?2
+             GROUP BY DATE(timestamp)
+             ORDER BY day DESC",
+        )?;
+        let rows = stmt.query_map(params![domain, since.to_rfc3339()], |row| {
+            Ok(DomainDayStat {
+                day: row.get::<_, String>(0)?,
+                total: row.get::<_, i64>(1)? as usize,
+                mentioned: row.get::<_, i64>(2)? as usize,
+                cited: row.get::<_, i64>(3)? as usize,
+            })
+        })?;
+        let mut stats = Vec::new();
+        for row in rows {
+            stats.push(row?);
+        }
+        Ok(stats)
     }
 
     /// Deletes records older than `days` days. Returns number of rows deleted.
