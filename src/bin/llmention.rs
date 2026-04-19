@@ -20,25 +20,35 @@ use llmention::{
 };
 
 const BANNER: &str = r#"
-  ██╗     ██╗     ███╗   ███╗███████╗███╗   ██╗████████╗██╗ ██████╗ ███╗   ██╗
-  ██║     ██║     ████╗ ████║██╔════╝████╗  ██║╚══██╔══╝██║██╔═══██╗████╗  ██║
-  ██║     ██║     ██╔████╔██║█████╗  ██╔██╗ ██║   ██║   ██║██║   ██║██╔██╗ ██║
-  ██║     ██║     ██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██║██║   ██║██║╚██╗██║
-  ███████╗███████╗██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║╚██████╔╝██║ ╚████║
-  ╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+   ██╗     ██╗     ███╗   ███╗███████╗███╗   ██╗████████╗██╗ ██████╗ ███╗   ██╗
+   ██║     ██║     ████╗ ████║██╔════╝████╗  ██║╚══██╔══╝██║██╔═══██╗████╗  ██║
+   ██║     ██║     ██╔████╔██║█████╗  ██╔██╗ ██║   ██║   ██║██║   ██║██╔██╗ ██║
+   ██║     ██║     ██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██║██║   ██║██║╚██╗██║
+   ███████╗███████╗██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║╚██████╔╝██║ ╚████║
+   ╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 "#;
+
+const TAGLINE: &str = "The private, local-first GEO companion for indie builders — track, generate, and optimize your visibility in AI answers.";
 
 #[derive(Parser)]
 #[command(
     name = "llmention",
-    about = "Track how often LLMs mention your brand — local, private, no SaaS",
-    long_about = "LLMention queries LLM providers with prompts about your brand and\n\
-                  records whether and how they mention it. All data stays on disk.\n\n\
-                  Quick start:\n  \
-                  llmention config                          # create config\n  \
-                  llmention audit myproject.com             # quick scan\n  \
-                  llmention report myproject.com --days 30  # view trends\n  \
-                  llmention doctor                          # verify setup",
+    about = "The private, local-first GEO companion for indie builders",
+    long_about = "LLMention — The private, local-first GEO companion for indie builders.
+
+Track, generate, and optimize your visibility in AI answers (ChatGPT, Claude, Perplexity, Grok, Ollama).
+
+Quick start:
+  llmention config                          # create config
+  llmention audit myproject.com             # quick scan
+  llmention optimize myproject.com --niche \"your niche\"  # auto-optimize
+  llmention quickstart                      # guided beginner flow
+
+Key commands:
+  audit    — Quick visibility scan (12 smart prompts)
+  optimize — Autonomous 5-step GEO agent
+  generate — Create LLM-citable content
+  report   — View trends over time",
     version,
     arg_required_else_help = true
 )]
@@ -255,6 +265,8 @@ enum Commands {
     Config,
     /// Check your setup: config, providers, Ollama connectivity
     Doctor,
+    /// Guided beginner flow — prints the recommended steps to get started
+    Quickstart,
 }
 
 #[derive(clap::Subcommand)]
@@ -871,6 +883,8 @@ async fn main() -> Result<()> {
         Commands::Config => run_config_command()?,
 
         Commands::Doctor => run_doctor(&config, &base_dir).await?,
+
+        Commands::Quickstart => run_quickstart()?,
     }
 
     Ok(())
@@ -881,8 +895,7 @@ async fn main() -> Result<()> {
 fn print_welcome() {
     println!("{}", BANNER.cyan().dimmed());
     println!("{}", "━".repeat(62).dimmed());
-    println!("  Track how often LLMs mention your brand — privately,");
-    println!("  locally, and without paying for a SaaS dashboard.");
+    println!("  {}", TAGLINE);
     println!("{}", "━".repeat(62).dimmed());
     println!();
 }
@@ -1100,6 +1113,36 @@ fn check(label: &str, ok: bool, detail: &str) {
     } else {
         println!("  {}  {}  {} (missing)", "✗".red(), label, detail.dimmed());
     }
+}
+
+fn run_quickstart() -> Result<()> {
+    println!();
+    println!("{}", "LLMention Quickstart".bold());
+    println!("{}", "━".repeat(56).dimmed());
+    println!();
+    println!("  {}  {}", "1.".bold().to_string(), "Create config".bold());
+    println!("      {}", "llmention config".cyan());
+    println!();
+    println!("  {}  {}", "2.".bold().to_string(), "Add your API key (or enable Ollama for free)".bold());
+    println!("      {}", "Edit ~/.llmention/config.toml".cyan());
+    println!();
+    println!("  {}  {}", "3.".bold().to_string(), "Verify your setup".bold());
+    println!("      {}", "llmention doctor".cyan());
+    println!();
+    println!("  {}  {}", "4.".bold().to_string(), "Run your first audit".bold());
+    println!("      {}", "llmention audit myproject.com --niche \"your niche\"".cyan());
+    println!();
+    println!("  {}  {}", "5.".bold().to_string(), "Let the agent optimize (optional)".bold());
+    println!("      {}", "llmention optimize myproject.com --niche \"your niche\" --auto-apply".cyan());
+    println!();
+    println!("{}", "─".repeat(56).dimmed());
+    println!();
+    println!("  {}  Need help? Run {} for full documentation.",
+        "Tip".yellow().bold(),
+        "llmention docs".cyan()
+    );
+    println!();
+    Ok(())
 }
 
 fn build_judge_provider(
