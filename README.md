@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/wiramahendra/llMention/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/wiramahendra/llMention/releases)
 
 **The terminal-native GEO agent for indie hackers and open-source maintainers.**
 
@@ -29,6 +29,8 @@ LLMention tracks, generates, and optimizes your brand's AI visibility in ChatGPT
 | Data stays local   | ✓                  | ✗ (their servers)    |
 | Content generation | ✓ built-in         | ✗                    |
 | Agentic optimize   | ✓ 5-step agent     | ✗                    |
+| Plugin templates   | ✓ marketplace      | ✗                    |
+| Shareable reports  | ✓ markdown + JSON  | ✗                    |
 | Project manager    | ✓ SQLite           | Limited              |
 | Watch mode         | ✓ background poll  | ✗                    |
 | Desktop GUI        | ✓ optional Tauri   | Web dashboard        |
@@ -216,12 +218,110 @@ llmention report myproject.com --export csv > results.csv
 llmention report myproject.com --export markdown > report.md
 ```
 
+### `stats` — Usage trends
+
+```bash
+llmention stats                        # list all tracked domains
+llmention stats myproject.com          # per-day mention breakdown
+llmention stats myproject.com --days 30
+```
+
+### `share` — Shareable reports
+
+Export a visibility snapshot to share with your team or on social:
+
+```bash
+llmention share myproject.com                      # markdown to stdout
+llmention share myproject.com --days 30 > report.md
+llmention share myproject.com --format json > report.json
+```
+
+### `prompts` — Community template marketplace
+
+```bash
+llmention prompts list                  # browse all available templates
+llmention prompts search rust           # search by keyword or tag
+llmention prompts install rust-crate    # install & customize locally
+```
+
+### `plugins` — Plugin management
+
+```bash
+llmention plugins                       # list installed plugins
+llmention plugins enable rust-crate     # mark as active
+```
+
+Once installed, apply a plugin with `--plugin`:
+
+```bash
+llmention generate "best rust cli tool" --plugin rust-crate --about "myproject.io is..."
+llmention optimize myproject.com --niche "Rust CLI" --plugin rust-crate --auto-apply
+```
+
+### `docs` — Command reference
+
+```bash
+llmention docs                         # print full docs as markdown
+llmention docs > COMMANDS.md           # save to file
+```
+
 ### `config` / `doctor`
 
 ```bash
 llmention config     # create ~/.llmention/config.toml
 llmention doctor     # verify config, providers, and Ollama connectivity
 ```
+
+---
+
+## Plugin System
+
+LLMention supports **prompt plugins** — reusable template packs that specialize content generation for specific niches (Rust crates, Python packages, SaaS products, etc.).
+
+### Built-in templates
+
+| Name | Best for |
+|------|----------|
+| `rust-crate` | Rust crates and CLI tools |
+| `python-package` | Python packages (PyPI) |
+| `saas-product` | SaaS products and web apps |
+| `open-source` | Any open-source project |
+| `technical-blog` | Developer blogs and tutorials |
+| `personal-brand` | Indie hackers and personal brands |
+
+### Installing a template
+
+```bash
+llmention prompts install rust-crate
+# Files written to ~/.llmention/plugins/rust-crate/
+# Edit generate.prompt.md to customize
+```
+
+### Creating your own plugin
+
+```
+~/.llmention/plugins/my-plugin/
+  plugin.toml           # name, version, description, tags
+  generate.prompt.md    # system prompt for content generation
+  discover.prompt.md    # system prompt for prompt discovery (optional)
+```
+
+`plugin.toml`:
+```toml
+[meta]
+name = "my-plugin"
+version = "1.0.0"
+description = "GEO for my niche"
+author = "your-name"
+
+[templates]
+generate = "generate.prompt.md"
+discover  = "discover.prompt.md"
+```
+
+Templates support `{about}`, `{niche}`, `{domain}`, `{competitors}` variables.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full plugin authoring guide.
 
 ---
 
@@ -292,11 +392,13 @@ concurrency = 5
 | Tracking | `tracker.rs` | Concurrent query orchestrator (semaphore-limited) |
 | Parsing | `parser.rs` | Rule-based mention / citation / sentiment detection |
 | Cache | `cache.rs` | 24-hour SHA-256 keyed file cache |
-| Storage | `storage.rs` | SQLite (`~/.llmention/mentions.db`) with projects table |
-| Generation | `geo/generator.rs` | GEO content via LlmProvider + embedded prompt templates |
+| Storage | `storage.rs` | SQLite (`~/.llmention/mentions.db`) with projects + stats |
+| Generation | `geo/generator.rs` | GEO content via LlmProvider + plugin template support |
 | Evaluation | `geo/evaluator.rs` | Citability scoring using structured LLM eval |
 | Agent | `agent/optimizer.rs` | 5-step orchestrator (discover → audit → generate → score) |
 | Discovery | `agent/prompt_discovery.rs` | LLM-based high-intent prompt generation |
+| Plugins | `plugins/` | TOML manifest loader + local plugin discovery |
+| Marketplace | `marketplace/` | 6 built-in niche templates + search/install |
 
 ---
 
@@ -304,23 +406,32 @@ concurrency = 5
 
 ```
 src/
-  bin/llmention.rs        CLI entrypoint (clap, 9 commands)
+  bin/llmention.rs        CLI entrypoint (clap, 14 commands)
   agent/
     optimizer.rs          5-step GEO agent
     plan.rs               OptimizationPlan structs
     prompt_discovery.rs   LLM-driven prompt discovery
   geo/
-    generator.rs          GEO content generation
+    generator.rs          GEO content generation (plugin-aware)
     evaluator.rs          Before/after citability scoring
     prompts.rs            Template loading, default_prompts()
     templates/            Embedded .prompt.md files
+  marketplace/
+    registry.rs           Built-in template catalog (6 niches)
+    builtin.rs            Embedded template strings
+  plugins/
+    manifest.rs           PluginManifest / PluginMeta structs
+    loader.rs             Plugin discovery from ~/.llmention/plugins/
   providers/              LlmProvider trait + OpenAI, Anthropic, xAI, Perplexity, Ollama
   tracker.rs              Parallel query orchestrator
   parser.rs               Mention/citation/sentiment detection
   cache.rs                24-hour file cache
-  storage.rs              SQLite (mentions + projects tables)
-  report.rs               Terminal output + CSV/Markdown export
+  storage.rs              SQLite (mentions + projects + stats)
+  report.rs               Terminal output + CSV/Markdown/JSON export
   types.rs                Shared types
+
+templates/community/      Example community plugins (submit PRs here)
+  rust-crate/             Rust crate optimizer template
 
 tauri-app/                Optional desktop GUI (Tauri v2 + React)
   src/                    React frontend (TypeScript)
@@ -342,11 +453,14 @@ scripts/
 cargo test        # 23 unit tests
 cargo clippy
 cargo build --release
+ls -lh target/release/llmention   # must stay under 10 MB
 ```
 
 To add a new provider: implement `LlmProvider` in `src/providers/`, add config fields in `src/config.rs`, wire it in `tracker::build_providers`.
 
-PRs welcome. Please keep the binary under 10 MB (`cargo build --release && ls -lh target/release/llmention`).
+To add a community template: see [CONTRIBUTING.md](CONTRIBUTING.md) — create a folder under `templates/community/<name>/` with a `plugin.toml` and prompt files.
+
+PRs welcome.
 
 ---
 
@@ -358,8 +472,8 @@ PRs welcome. Please keep the binary under 10 MB (`cargo build --release && ls -l
 | 2 | `generate` — GEO-optimized markdown | ✅ Done |
 | 3 | `optimize` — 5-step GEO agent | ✅ Done |
 | 3 | `projects`, `watch`, `--quiet`, desktop app skeleton | ✅ Done |
-| 4 | Prompt marketplace (community prompt packs) | Planned |
-| 4 | Plugin system for custom providers | Planned |
+| 4 | `prompts`, `plugins`, `share`, `stats`, `docs` | ✅ Done |
+| 4 | Plugin system + community template marketplace | ✅ Done |
 | 5 | Self-hosted web dashboard | Planned |
 
 ---
