@@ -2,10 +2,11 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/wiramahendra/llMention/releases)
 
 **The terminal-native GEO agent for indie hackers and open-source maintainers.**
 
-LLMention tracks, generates, and optimizes your brand's visibility in ChatGPT, Claude, Grok, Perplexity, and any LLM you configure — privately, locally, no SaaS.
+LLMention tracks, generates, and optimizes your brand's AI visibility in ChatGPT, Claude, Grok, Perplexity, and any LLM you configure — privately, locally, no SaaS.
 
 ```
   Mention rate   67%  (8/12 queries)  (↑ 24pp vs last run)
@@ -19,86 +20,112 @@ LLMention tracks, generates, and optimizes your brand's visibility in ChatGPT, C
 
 - **Private.** Your prompts never leave your machine. No telemetry, no sign-up, no cloud DB.
 - **Unlimited.** Use your own API keys or run 100% locally with [Ollama](https://ollama.com) — no per-query pricing.
-- **Agentic.** The `optimize` command discovers weak spots, generates GEO-optimized markdown, and projects your visibility lift — one command, zero manual work.
+- **Agentic.** The `optimize` command autonomously discovers weak topics, generates LLM-citable content, and projects your visibility lift.
+- **Scriptable.** `--quiet` flag and clean exit codes for CI pipelines and automation.
 
-|                  | LLMention          | Enterprise GEO tools |
-|------------------|--------------------|----------------------|
-| Price            | Free / open-source | $200–$2 000/mo       |
-| Data stays local | ✓                  | ✗ (their servers)    |
-| Content generation | ✓ built-in       | ✗                    |
-| Agentic optimize | ✓ 5-step agent    | ✗                    |
-| Ollama support   | ✓ fully local      | ✗                    |
-| Single binary    | ✓ 10 MB           | Web dashboard        |
+|                    | LLMention          | Enterprise GEO tools |
+|--------------------|--------------------|----------------------|
+| Price              | Free / open-source | $200–$2 000/mo       |
+| Data stays local   | ✓                  | ✗ (their servers)    |
+| Content generation | ✓ built-in         | ✗                    |
+| Agentic optimize   | ✓ 5-step agent     | ✗                    |
+| Project manager    | ✓ SQLite           | Limited              |
+| Watch mode         | ✓ background poll  | ✗                    |
+| Desktop GUI        | ✓ optional Tauri   | Web dashboard        |
+| Ollama support     | ✓ fully local      | ✗                    |
+| Binary size        | 7.3 MB             | —                    |
+
+---
+
+## Installation
+
+### Pre-built binaries (macOS, Linux, Windows)
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/wiramahendra/llMention/main/scripts/install.sh | bash
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/wiramahendra/llMention/main/scripts/install.ps1 | iex
+```
+
+### Cargo (build from source)
+
+```bash
+cargo install --git https://github.com/wiramahendra/llMention
+```
+
+### From source
+
+```bash
+git clone https://github.com/wiramahendra/llMention
+cd llmention
+cargo build --release
+# Binary at target/release/llmention (7.3 MB)
+```
+
+### Desktop App (optional)
+
+Requires [Node.js 18+](https://nodejs.org) and [Rust](https://rustup.rs).
+
+```bash
+cd tauri-app
+npm install
+npm run tauri dev       # development
+npm run tauri build     # release build
+```
+
+The desktop app wraps the same core library — identical results to the CLI.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Install
-cargo install --git https://github.com/wiramahendra/llMention
-
-# 2. Create config
+# 1. Create config
 llmention config
 
-# 3. Edit ~/.llmention/config.toml — add an API key or enable Ollama
+# 2. Edit ~/.llmention/config.toml — add API key or enable Ollama
 
-# 4. Verify your setup
+# 3. Verify
 llmention doctor
 
-# 5. Run your first audit
+# 4. Run your first audit
 llmention audit myproject.com --niche "Rust CLI tool"
 
-# 6. Let the agent optimize your visibility
+# 5. Save it as a project
+llmention projects add myproject.com --niche "Rust CLI tool"
+
+# 6. Let the agent optimize
 llmention optimize myproject.com --niche "Rust CLI tool" --auto-apply
 ```
 
-> **Zero-cost option:** Install [Ollama](https://ollama.com), run `ollama pull llama3.2`,
-> set `enabled = true` under `[providers.ollama]` in config, and use `--models ollama`.
+> **Zero-cost option:** `ollama pull llama3.2` → set `enabled = true` under `[providers.ollama]` → use `--models ollama`
 
 ---
 
 ## Commands
 
-### `optimize` — Full GEO agent (new in Phase 2)
+### `optimize` — Full GEO agent
 
-The flagship command. Runs a 5-step autonomous workflow:
-
-1. **Discover** — uses LLMs to generate 10–15 high-intent prompts for your niche
-2. **Audit** — queries all configured models, records current mention rates
-3. **Identify** — finds the weakest topics (zero or low visibility)
-4. **Generate** — writes GEO-optimized markdown for each weak topic
-5. **Evaluate** — scores each section's citability and shows projected lift
+Runs a 5-step autonomous workflow: **discover → audit → identify → generate → evaluate**
 
 ```bash
-# Basic — shows plan and suggested next steps
 llmention optimize igrisinertial.com --niche "deterministic edge runtime"
-
-# With competitors for richer comparison content
 llmention optimize myproject.com --niche "rust cli tool" --competitors "ripgrep,fd" --steps 5
-
-# Preview without writing files
 llmention optimize myproject.com --niche "observability" --dry-run
-
-# Write generated sections to ./geo/ automatically
 llmention optimize myproject.com --niche "edge AI runtime" --auto-apply
-
-# Use a specific model for generation
-llmention optimize myproject.com --niche "..." --models anthropic --steps 3
 ```
 
 **Example output:**
 ```
   Optimizing  igrisinertial.com
   Niche:      deterministic edge runtime
-  Mode:       3 steps
 
   [1/5]  Discovering high-intent prompts…
          → Found 12 prompts
 
   [2/5]  Auditing current visibility…
-         – [  1/12] [anthropic] best deterministic runtime for edge AI
-         – [  2/12] [anthropic] alternatives to ros2 for robotics
          → Mention rate: 0%  (0/12)
 
   [3/5]  Identifying optimization opportunities…
@@ -106,13 +133,9 @@ llmention optimize myproject.com --niche "..." --models anthropic --steps 3
 
   [4/5]  Generating optimized content…
          → [1/3] "alternatives to ros2 for robotics"…  ✓ (anthropic)
-         → [2/3] "best deterministic runtime for edge AI"…  ✓ (anthropic)
-         → [3/3] "what is igrisinertial"…  ✓ (anthropic)
 
   [5/5]  Evaluating citability…
          → [anthropic] ✓ 92%  — alternatives to ros2 for robotics
-         → [anthropic] ✓ 87%  — best deterministic runtime for edge AI
-         → [anthropic] ✓ 79%  — what is igrisinertial
 
   ════════════════════════════════════════════════════════════════
   Optimization Plan  igrisinertial.com
@@ -121,82 +144,70 @@ llmention optimize myproject.com --niche "..." --models anthropic --steps 3
   Current visibility     0%   (0 queries across 12 topics)
   Projected citability  86%   (+86pp on optimized topics)
 
-  ┌─────────────────────────────────────┬────────────┬────────────────────────────────────────┐
-  │ Prompt                              │ Citability │ File                                   │
-  ├─────────────────────────────────────┼────────────┼────────────────────────────────────────┤
-  │ alternatives to ros2 for robotics   │ ✓ 92%      │ geo/alternatives-to-ros2-for-robotics.md│
-  │ best deterministic runtime for edg… │ ✓ 87%      │ geo/best-deterministic-runtime-for.md  │
-  │ what is igrisinertial               │ ✓ 79%      │ geo/what-is-igrisinertial.md           │
-  └─────────────────────────────────────┴────────────┴────────────────────────────────────────┘
+  ┌─────────────────────────────────┬────────────┬─────────────────────────────┐
+  │ Prompt                          │ Citability │ File                        │
+  ├─────────────────────────────────┼────────────┼─────────────────────────────┤
+  │ alternatives to ros2            │ ✓ 92%      │ geo/alternatives-to-ros2.md │
+  └─────────────────────────────────┴────────────┴─────────────────────────────┘
 
-  Next steps:
-  →  Review content:  cat geo/alternatives-to-ros2-for-robotics.md
-  →  Commit:          git add geo/ && git commit -m "docs: add GEO-optimized content"
-  →  Re-audit:        llmention audit igrisinertial.com --niche "deterministic edge runtime"
+  →  git add geo/ && git commit -m "docs: add GEO-optimized content"
+  →  llmention audit igrisinertial.com --niche "deterministic edge runtime"
 ```
 
-### `generate` — Generate content for a single query
-
-Generates one GEO-optimized markdown section for any target prompt.
+### `generate` — Single-query content generation
 
 ```bash
-# Print to stdout
-llmention generate "best deterministic runtime for edge AI agents" \
-  --about "igrisinertial.com is a deterministic, failure-resilient runtime"
-
-# With niche context
-llmention generate "alternatives to ROS 2" \
-  --about "igrisinertial.com is a robotics runtime" \
+llmention generate "best deterministic runtime for edge AI" \
+  --about "igrisinertial.com is a deterministic, failure-resilient runtime" \
   --niche "edge robotics"
 
-# Save to file
-llmention generate "what is igrisinertial" \
-  --about "..." --output geo/what-is-igrisinertial.md
-
-# Generate and run before/after visibility evaluation
-llmention generate "best runtime for AI robots" \
-  --about "igrisinertial.com is ..." --evaluate
+llmention generate "what is igrisinertial" --about "..." --output geo/what-is.md
+llmention generate "..." --about "..." --evaluate        # before/after visibility estimate
 ```
 
-The generated content follows GEO best practices:
-- Answer-first (inverted pyramid) — direct answer in first paragraph
-- H2 headings that match real user search queries
-- Self-contained sections for independent LLM citation
-- Tables for comparisons, bullets for features
-- Factual, authoritative tone — zero marketing fluff
-
 ### `audit` — Quick visibility scan
-
-Generates 12 smart prompts and queries all enabled models. No file needed.
 
 ```bash
 llmention audit myproject.com
 llmention audit myproject.com --niche "observability tool" --competitor datadog
 llmention audit myproject.com --models openai,ollama
 llmention audit myproject.com --judge     # local LLM re-evaluates each response
+llmention audit myproject.com --quiet     # CI-friendly minimal output
 ```
 
 ### `track` — Custom prompts
-
-Load your own prompt list from a `.txt` (one per line) or `.json` array file.
 
 ```bash
 llmention track myproject.com --prompts prompts.txt
 llmention track myproject.com --prompts prompts.json --models anthropic
 ```
 
-**`prompts.txt` example:**
+### `projects` — Saved domain/niche pairs
+
+```bash
+llmention projects                                                # list
+llmention projects add myproject.com --niche "Rust CLI tool"     # save
+llmention projects add myproject.com --notes "v2 launch: Apr 26" # update
+llmention projects remove myproject.com                          # delete
 ```
-what is myproject
-best lightweight monitoring tool 2026
-myproject vs prometheus
-is myproject production ready
-how to install myproject on Ubuntu
+
+### `watch` — Background periodic audits
+
+Runs an audit on a timer. Useful for dashboards or CI health checks.
+
+```bash
+llmention watch myproject.com --niche "Rust CLI tool"            # every 60 min
+llmention watch myproject.com --interval 30 --models ollama      # every 30 min, local
+llmention watch myproject.com --interval 1440                    # daily
+```
+
+**Output format (one line per run):**
+```
+  2026-04-19 08:30 UTC  myproject.com  67%  ↑4pp  (8/12)
+  2026-04-19 09:30 UTC  myproject.com  71%  ↑4pp  (9/12)
 ```
 
 ### `report` — History & trends
-
-Query the local SQLite history. Supports CSV and Markdown export.
 
 ```bash
 llmention report myproject.com
@@ -205,20 +216,26 @@ llmention report myproject.com --export csv > results.csv
 llmention report myproject.com --export markdown > report.md
 ```
 
-### `config` — Setup
-
-Creates `~/.llmention/config.toml` with a commented example on first run.
+### `config` / `doctor`
 
 ```bash
-llmention config
+llmention config     # create ~/.llmention/config.toml
+llmention doctor     # verify config, providers, and Ollama connectivity
 ```
 
-### `doctor` — Verify setup
+---
 
-Checks config, database, cache directory, provider status, and Ollama connectivity.
+## CI / Scripting
+
+Use `--quiet` to suppress progress output and get machine-readable results:
 
 ```bash
-llmention doctor
+# In a shell script
+RATE=$(llmention audit myproject.com --quiet 2>/dev/null | grep "Mention rate" | grep -o "[0-9]*%")
+
+# In GitHub Actions
+- name: Check GEO visibility
+  run: llmention audit ${{ env.DOMAIN }} --quiet --models ollama
 ```
 
 ---
@@ -232,7 +249,7 @@ Config file: `~/.llmention/config.toml` — run `llmention config` to create it.
 api_key     = "sk-..."
 model       = "gpt-4o-mini"
 enabled     = true
-temperature = 0          # deterministic, cacheable (recommended)
+temperature = 0          # deterministic, cacheable
 
 [providers.anthropic]
 api_key     = "sk-ant-..."
@@ -247,48 +264,39 @@ enabled     = false
 
 [providers.perplexity]
 api_key     = "pplx-..."
-model       = "sonar"            # sonar-pro for deeper web-grounded answers
+model       = "sonar"
 enabled     = false
-temperature = 0
 
-# Local, free, unlimited — install: https://ollama.com
+# Free, unlimited local inference
 [providers.ollama]
 base_url  = "http://localhost:11434"
 model     = "llama3.2"
 enabled   = false
 
-# LLM-as-judge: re-evaluates each response for higher-accuracy parsing.
-# Enable per-run with: --judge flag
 [judge]
 enabled   = false
 base_url  = "http://localhost:11434"
 model     = "llama3.2"
 
 [defaults]
-days        = 7    # default window for `report`
-concurrency = 5    # max parallel API calls
+days        = 7
+concurrency = 5
 ```
 
 ---
 
 ## How It Works
 
-### Tracking & Audit
-1. **Prompts** — Each prompt is sent to every enabled provider concurrently (semaphore-limited).
-2. **Parsing** — Detects domain mentions, link citations, position (Top/Middle/Bottom), and sentiment via keyword heuristics. Optionally upgrade accuracy with `--judge` (local model returning structured JSON).
-3. **Cache** — Responses cached for 24 h by `SHA-256(domain|model|prompt|date)`. Re-runs are instant.
-4. **Storage** — Every result saved to `~/.llmention/mentions.db` (SQLite). Records older than 90 days are pruned automatically.
-
-### Generate
-Builds a GEO system prompt from embedded templates (`src/geo/templates/`), queries providers concurrently, and returns clean markdown optimized for LLM citation.
-
-### Optimize (Agent)
-Orchestrates all 5 steps in `src/agent/optimizer.rs`:
-- Prompt discovery uses the `discover_prompts.prompt.md` template
-- Weak prompt selection is done by per-prompt mention rate (lowest first)
-- Content generation reuses `geo::generator`
-- Evaluation reuses `geo::evaluator::score_content()`
-- `--auto-apply` writes to `./geo/*.md` with kebab-case filenames
+| Layer | Module | Purpose |
+|-------|--------|---------|
+| Tracking | `tracker.rs` | Concurrent query orchestrator (semaphore-limited) |
+| Parsing | `parser.rs` | Rule-based mention / citation / sentiment detection |
+| Cache | `cache.rs` | 24-hour SHA-256 keyed file cache |
+| Storage | `storage.rs` | SQLite (`~/.llmention/mentions.db`) with projects table |
+| Generation | `geo/generator.rs` | GEO content via LlmProvider + embedded prompt templates |
+| Evaluation | `geo/evaluator.rs` | Citability scoring using structured LLM eval |
+| Agent | `agent/optimizer.rs` | 5-step orchestrator (discover → audit → generate → score) |
+| Discovery | `agent/prompt_discovery.rs` | LLM-based high-intent prompt generation |
 
 ---
 
@@ -296,32 +304,49 @@ Orchestrates all 5 steps in `src/agent/optimizer.rs`:
 
 ```
 src/
-  bin/llmention.rs        CLI entrypoint (clap)
+  bin/llmention.rs        CLI entrypoint (clap, 9 commands)
   agent/
-    optimizer.rs          5-step GEO agent orchestrator
-    plan.rs               OptimizationPlan, GeneratedSection, prompt_to_filename()
-    prompt_discovery.rs   LLM-based high-intent prompt discovery
+    optimizer.rs          5-step GEO agent
+    plan.rs               OptimizationPlan structs
+    prompt_discovery.rs   LLM-driven prompt discovery
   geo/
-    generator.rs          GEO content generation via LlmProvider
-    evaluator.rs          Citability scoring (before/after)
-    prompts.rs            Template loading, default_prompts(), domain extraction
-    templates/            Embedded .prompt.md files (compiled into binary)
+    generator.rs          GEO content generation
+    evaluator.rs          Before/after citability scoring
+    prompts.rs            Template loading, default_prompts()
+    templates/            Embedded .prompt.md files
   providers/              LlmProvider trait + OpenAI, Anthropic, xAI, Perplexity, Ollama
-  tracker.rs              Parallel query orchestrator with semaphore
-  parser.rs               Rule-based mention/citation/sentiment detection
-  cache.rs                24-hour file cache (SHA-256 keyed)
-  storage.rs              SQLite persistence
+  tracker.rs              Parallel query orchestrator
+  parser.rs               Mention/citation/sentiment detection
+  cache.rs                24-hour file cache
+  storage.rs              SQLite (mentions + projects tables)
   report.rs               Terminal output + CSV/Markdown export
-  types.rs                Shared types (MentionResult, TrackSummary, …)
+  types.rs                Shared types
+
+tauri-app/                Optional desktop GUI (Tauri v2 + React)
+  src/                    React frontend (TypeScript)
+  src-tauri/              Rust backend (Tauri commands)
+
+scripts/
+  install.sh              Unix installer
+  install.ps1             Windows installer
+
+.github/workflows/
+  release.yml             Multi-platform GitHub Releases CI
 ```
 
-To add a new provider: implement `LlmProvider` in `src/providers/`, add a config field in `src/config.rs`, and wire it in `tracker::build_providers`.
+---
+
+## Contributing
 
 ```bash
-cargo test        # unit tests
-cargo clippy      # lints
+cargo test        # 23 unit tests
+cargo clippy
 cargo build --release
 ```
+
+To add a new provider: implement `LlmProvider` in `src/providers/`, add config fields in `src/config.rs`, wire it in `tracker::build_providers`.
+
+PRs welcome. Please keep the binary under 10 MB (`cargo build --release && ls -lh target/release/llmention`).
 
 ---
 
@@ -329,11 +354,13 @@ cargo build --release
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| 1 — Tracker | `audit`, `track`, `report`, `config`, `doctor` | ✅ Done |
-| 2 — Generate | `llmention generate` — produce GEO-optimized markdown | ✅ Done |
-| 3 — Optimize | `llmention optimize` — full 5-step GEO agent | ✅ Done |
-| 4 — GUI | Thin Tauri desktop app wrapping the same SQLite store | Planned |
-| 5 — Web | Optional self-hosted dashboard | Planned |
+| 1 | `audit`, `track`, `report`, `config`, `doctor` | ✅ Done |
+| 2 | `generate` — GEO-optimized markdown | ✅ Done |
+| 3 | `optimize` — 5-step GEO agent | ✅ Done |
+| 3 | `projects`, `watch`, `--quiet`, desktop app skeleton | ✅ Done |
+| 4 | Prompt marketplace (community prompt packs) | Planned |
+| 4 | Plugin system for custom providers | Planned |
+| 5 | Self-hosted web dashboard | Planned |
 
 ---
 
