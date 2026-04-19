@@ -1,7 +1,10 @@
 use colored::Colorize;
 use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
 
-use crate::types::{MentionResult, Position, Sentiment, TrackSummary};
+use crate::{
+    geo::{evaluator::EvalDelta, generator::GenerateResult},
+    types::{MentionResult, Position, Sentiment, TrackSummary},
+};
 
 pub fn print_summary(summary: &TrackSummary, prev_rate: Option<f64>) {
     println!();
@@ -257,6 +260,91 @@ pub fn export_csv(results: &[MentionResult]) -> String {
         ));
     }
     out
+}
+
+pub fn print_generate_results(results: &[GenerateResult], user_prompt: &str) {
+    println!();
+    println!("{}", "━".repeat(64).dimmed());
+    println!("  {}  {}", "Generated Content".bold(), format!("\"{}\"", user_prompt).cyan());
+    println!("{}", "━".repeat(64).dimmed());
+
+    for result in results {
+        println!();
+        println!(
+            "  {}  {}",
+            "──".dimmed(),
+            format!("by {}", result.model).cyan().bold()
+        );
+        println!("{}", "─".repeat(64).dimmed());
+        println!();
+        println!("{}", result.content);
+        println!();
+    }
+}
+
+pub fn print_eval_delta(delta: &EvalDelta, before_stored: Option<f64>) {
+    println!("{}", "━".repeat(64).dimmed());
+    println!("  {}", "Visibility Estimate".bold());
+    println!("{}", "━".repeat(64).dimmed());
+    println!();
+
+    let mut table = Table::new();
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec![
+        Cell::new("Model").add_attribute(Attribute::Bold),
+        Cell::new("Would Cite?").add_attribute(Attribute::Bold),
+        Cell::new("Confidence").add_attribute(Attribute::Bold),
+        Cell::new("Reason").add_attribute(Attribute::Bold),
+    ]);
+    for r in &delta.after {
+        let cite_cell = if r.would_cite {
+            Cell::new("✓ Yes").fg(Color::Green)
+        } else {
+            Cell::new("✗ No").fg(Color::Red)
+        };
+        let conf_str = format!("{:.0}%", r.confidence * 100.0);
+        let conf_cell = if r.confidence >= 0.7 {
+            Cell::new(conf_str).fg(Color::Green)
+        } else if r.confidence >= 0.4 {
+            Cell::new(conf_str).fg(Color::Yellow)
+        } else {
+            Cell::new(conf_str).fg(Color::Red)
+        };
+        table.add_row(vec![
+            Cell::new(&r.model).fg(Color::Cyan),
+            cite_cell,
+            conf_cell,
+            Cell::new(r.reason.as_deref().unwrap_or("—")),
+        ]);
+    }
+    println!("{table}");
+    println!();
+
+    let before_display = before_stored.unwrap_or_else(|| delta.before_rate());
+    let after_rate = delta.after_rate();
+    let delta_val = after_rate - before_display;
+
+    let before_str = format!("{:.0}%", before_display);
+    let after_str = format!("{:.0}%", after_rate);
+    let delta_str = if delta_val >= 0.0 {
+        format!("+{:.0}pp", delta_val).green().bold().to_string()
+    } else {
+        format!("{:.0}pp", delta_val).red().bold().to_string()
+    };
+
+    println!(
+        "  Before  {}   After  {}   Delta  {}",
+        before_str.dimmed(),
+        if after_rate >= 60.0 {
+            after_str.green().bold()
+        } else if after_rate >= 30.0 {
+            after_str.yellow().bold()
+        } else {
+            after_str.red().bold()
+        },
+        delta_str
+    );
+    println!();
 }
 
 fn csv_escape(s: &str) -> String {
