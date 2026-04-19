@@ -6,6 +6,8 @@ pub struct GeneratedSection {
     pub citability_rate: f64,
     /// Suggested filename, e.g. "geo/best-deterministic-runtime.md"
     pub file_name: String,
+    /// How many refinement rounds were used (0 = accepted on first pass).
+    pub refinement_rounds: usize,
 }
 
 pub struct OptimizationPlan {
