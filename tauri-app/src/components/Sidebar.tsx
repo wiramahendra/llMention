@@ -73,7 +73,7 @@ export default function Sidebar({ active, onChange }: Props) {
           </div>
         ))}
       </nav>
-      <div style={styles.footer}>v0.2.0 · local-first</div>
+      <div style={styles.footer}>v0.3.0 · local-first</div>
     </div>
   );
 }
