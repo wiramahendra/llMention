@@ -8,6 +8,9 @@ pub struct GenerateOptions {
     pub about: String,
     pub niche: String,
     pub verbose: bool,
+    /// Optional plugin system prompt override (replaces the default base_generate template).
+    /// Supports `{about}` and `{niche}` variable substitution.
+    pub system_prompt_override: Option<String>,
 }
 
 pub struct GenerateResult {
@@ -20,7 +23,10 @@ pub async fn generate(
     opts: &GenerateOptions,
     providers: &[Arc<dyn LlmProvider>],
 ) -> Result<Vec<GenerateResult>> {
-    let system = prompts::build_generate_system_prompt(&opts.about, &opts.niche);
+    let system = match &opts.system_prompt_override {
+        Some(tpl) => tpl.replace("{about}", &opts.about).replace("{niche}", &opts.niche),
+        None => prompts::build_generate_system_prompt(&opts.about, &opts.niche),
+    };
 
     let handles: Vec<_> = providers
         .iter()
