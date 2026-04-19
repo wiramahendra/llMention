@@ -17,16 +17,19 @@ pub async fn discover_high_intent_prompts(
 }
 
 /// Query providers to discover prompts, trying each until one returns a valid list.
+/// `system_override` replaces the default discover system prompt (for plugin templates).
 pub async fn discover_with_providers(
     domain: &str,
     niche: &str,
     competitors: &[String],
     providers: &[Arc<dyn LlmProvider>],
+    system_override: Option<&str>,
 ) -> Vec<String> {
     let user_prompt = prompts::build_discover_user_prompt(domain, niche, competitors);
+    let system = system_override.unwrap_or(DISCOVER_PROMPTS);
 
     for provider in providers {
-        match provider.query_with_system(Some(DISCOVER_PROMPTS), &user_prompt).await {
+        match provider.query_with_system(Some(system), &user_prompt).await {
             Ok(response) => {
                 let parsed = parse_prompt_list(&response);
                 if parsed.len() >= 5 {
