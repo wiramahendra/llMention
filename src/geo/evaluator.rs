@@ -39,6 +39,16 @@ fn cite_rate(results: &[EvalResult]) -> f64 {
     cited as f64 / results.len() as f64 * 100.0
 }
 
+/// Score a single piece of content across all providers (no baseline, just after).
+/// Returns the raw eval results for use by the optimize agent.
+pub async fn score_content(
+    user_prompt: &str,
+    content: &str,
+    providers: &[Arc<dyn LlmProvider>],
+) -> Result<Vec<EvalResult>> {
+    Ok(run_with_content(providers, user_prompt, content).await)
+}
+
 pub async fn evaluate_content(
     user_prompt: &str,
     generated_content: &str,
