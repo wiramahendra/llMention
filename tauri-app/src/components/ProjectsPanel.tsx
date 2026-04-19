@@ -76,7 +76,12 @@ export default function ProjectsPanel() {
       </div>
 
       {projects.length === 0 ? (
-        <div style={{ color: "#8b949e", fontSize: 13 }}>No projects yet. Add one above.</div>
+        <div style={{ color: "#8b949e", fontSize: 13 }}>
+          <div style={{ marginBottom: 8 }}>No projects yet. Add one above.</div>
+          <div style={{ fontSize: 11, opacity: 0.7 }}>
+            Example: <code>igrisinertial.com</code> · niche: <code>deterministic edge runtime</code>
+          </div>
+        </div>
       ) : (
         <div style={card}>
           {projects.map((p, i) => (
