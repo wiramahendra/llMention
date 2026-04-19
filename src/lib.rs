@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod config;
+pub mod geo;
 pub mod parser;
 pub mod providers;
 pub mod report;
