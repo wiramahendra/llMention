@@ -12,6 +12,8 @@ use llmention::{
         generator::{self, GenerateOptions},
         prompts::{self, extract_domain_hint},
     },
+    marketplace::{builtin, registry},
+    plugins,
     report,
     storage::Storage,
     tracker::{self, TrackOptions},
@@ -124,6 +126,7 @@ enum Commands {
     ///   llmention optimize myproject.com --niche "rust cli tool" --competitors "ripgrep,fd" --steps 5
     ///   llmention optimize myproject.com --niche "..." --dry-run
     ///   llmention optimize myproject.com --niche "..." --auto-apply
+    ///   llmention optimize myproject.com --niche "Rust CLI" --plugin rust-crate
     Optimize {
         /// Domain or brand to optimize (e.g. myproject.com)
         domain: String,
@@ -142,6 +145,9 @@ enum Commands {
         /// Automatically write generated sections to ./geo/ folder
         #[arg(long)]
         auto_apply: bool,
+        /// Apply a named plugin template (installed or builtin)
+        #[arg(long)]
+        plugin: Option<String>,
     },
     /// Generate GEO-optimized markdown content for a target query
     ///
@@ -150,6 +156,7 @@ enum Commands {
     ///   llmention generate "alternatives to ROS 2" --niche "edge robotics" --evaluate
     ///   llmention generate "what is myproject" --about "..." --output content.md
     ///   llmention generate "..." --about "..." --models anthropic --evaluate
+    ///   llmention generate "best rust cli tool" --plugin rust-crate --about "..."
     Generate {
         /// Target query or topic to generate content for
         prompt: String,
@@ -165,6 +172,9 @@ enum Commands {
         /// After generating, estimate before/after visibility lift with LLM evaluation
         #[arg(long, short)]
         evaluate: bool,
+        /// Apply a named plugin template (installed or builtin)
+        #[arg(long)]
+        plugin: Option<String>,
     },
     /// Manage saved projects (domain + niche pairs for quick re-auditing)
     ///
@@ -191,6 +201,56 @@ enum Commands {
         #[arg(long, short, default_value = "60")]
         interval: u64,
     },
+    /// Manage installed prompt plugins
+    ///
+    /// Examples:
+    ///   llmention plugins
+    ///   llmention plugins enable rust-crate
+    ///   llmention plugins disable rust-crate
+    Plugins {
+        #[command(subcommand)]
+        action: Option<PluginAction>,
+    },
+    /// Browse and install community prompt templates
+    ///
+    /// Examples:
+    ///   llmention prompts list
+    ///   llmention prompts search rust
+    ///   llmention prompts install rust-crate
+    Prompts {
+        #[command(subcommand)]
+        action: PromptMarketAction,
+    },
+    /// Export a shareable visibility report
+    ///
+    /// Examples:
+    ///   llmention share myproject.com
+    ///   llmention share myproject.com --days 30 > report.md
+    ///   llmention share myproject.com --format json > report.json
+    Share {
+        /// Domain to export
+        domain: String,
+        /// Number of days of history to include
+        #[arg(long, short, default_value = "7")]
+        days: u32,
+        /// Output format
+        #[arg(long, short, value_enum, default_value = "markdown")]
+        format: ShareFormat,
+    },
+    /// Show personal usage stats and trends
+    ///
+    /// Examples:
+    ///   llmention stats myproject.com
+    ///   llmention stats myproject.com --days 30
+    Stats {
+        /// Domain to show stats for (omit to list all tracked domains)
+        domain: Option<String>,
+        /// Number of days of history
+        #[arg(long, short, default_value = "30")]
+        days: u32,
+    },
+    /// Print command documentation as markdown
+    Docs,
     /// Create config file and show setup instructions
     Config,
     /// Check your setup: config, providers, Ollama connectivity
@@ -216,6 +276,44 @@ enum ProjectAction {
         /// Domain to remove
         domain: String,
     },
+}
+
+#[derive(clap::Subcommand)]
+enum PluginAction {
+    /// List installed plugins
+    List,
+    /// Mark a plugin as enabled (adds to config)
+    Enable {
+        /// Plugin name
+        name: String,
+    },
+    /// Mark a plugin as disabled (removes from config)
+    Disable {
+        /// Plugin name
+        name: String,
+    },
+}
+
+#[derive(clap::Subcommand)]
+enum PromptMarketAction {
+    /// List all available community templates
+    List,
+    /// Search templates by keyword, tag, or name
+    Search {
+        /// Search query
+        query: String,
+    },
+    /// Install a builtin template as a local plugin you can customize
+    Install {
+        /// Template name (e.g. rust-crate)
+        name: String,
+    },
+}
+
+#[derive(Clone, clap::ValueEnum)]
+enum ShareFormat {
+    Markdown,
+    Json,
 }
 
 #[tokio::main]
@@ -317,7 +415,7 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Optimize { domain, niche, competitors, steps, dry_run, auto_apply } => {
+        Commands::Optimize { domain, niche, competitors, steps, dry_run, auto_apply, plugin } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
                 no_providers_error();
@@ -331,15 +429,19 @@ async fn main() -> Result<()> {
                 .map(|s| s.trim().to_string())
                 .collect();
 
+            let generate_template_override = resolve_generate_template(plugin.as_deref(), &base_dir);
+            let discover_template_override = resolve_discover_template(plugin.as_deref(), &base_dir);
+
             println!(
-                "\n  {}  {}\n  {}  {}\n  {}  {} steps{}\n",
+                "\n  {}  {}\n  {}  {}\n  {}  {} steps{}{}\n",
                 "Optimizing".bold(),
                 domain.cyan().bold(),
                 "Niche:".dimmed(),
                 niche.cyan(),
                 "Mode:".dimmed(),
                 steps,
-                if dry_run { "  [dry-run]".yellow().to_string() } else { String::new() }
+                if dry_run { "  [dry-run]".yellow().to_string() } else { String::new() },
+                plugin.as_deref().map(|p| format!("  [plugin: {}]", p).yellow().to_string()).unwrap_or_default()
             );
 
             let opts = OptimizeOptions {
@@ -350,6 +452,8 @@ async fn main() -> Result<()> {
                 dry_run,
                 verbose: cli.verbose,
                 quiet: cli.quiet,
+                generate_template_override,
+                discover_template_override,
             };
 
             let plan = optimizer::optimize(&opts, &providers, &storage, &cache).await?;
@@ -393,7 +497,7 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Generate { prompt, about, niche, output, evaluate } => {
+        Commands::Generate { prompt, about, niche, output, evaluate, plugin } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
                 no_providers_error();
@@ -401,13 +505,15 @@ async fn main() -> Result<()> {
 
             let about_str = about.as_deref().unwrap_or("").to_string();
             let niche_str = niche.as_deref().unwrap_or("general").to_string();
+            let system_prompt_override = resolve_generate_template(plugin.as_deref(), &base_dir);
 
             println!(
-                "\n  {} {}\n  {} {}\n",
+                "\n  {} {}\n  {} {}{}\n",
                 "Generating content for:".bold(),
                 format!("\"{}\"", prompt).cyan(),
                 "Using models:".dimmed(),
-                providers.iter().map(|p| p.name()).collect::<Vec<_>>().join(", ").cyan()
+                providers.iter().map(|p| p.name()).collect::<Vec<_>>().join(", ").cyan(),
+                plugin.as_deref().map(|p| format!("  [plugin: {}]", p).yellow().to_string()).unwrap_or_default()
             );
 
             let opts = GenerateOptions {
@@ -415,6 +521,7 @@ async fn main() -> Result<()> {
                 about: about_str.clone(),
                 niche: niche_str,
                 verbose: cli.verbose,
+                system_prompt_override,
             };
 
             let results = generator::generate(&opts, &providers).await?;
@@ -560,6 +667,205 @@ async fn main() -> Result<()> {
                 }
                 tokio::time::sleep(dur).await;
             }
+        }
+
+        Commands::Plugins { action } => {
+            let installed = plugins::discover_plugins(&base_dir);
+            match action {
+                None | Some(PluginAction::List) => {
+                    println!();
+                    println!("  {}  {} installed", "Plugins".bold(), installed.len().to_string().cyan());
+                    println!("{}", "─".repeat(64).dimmed());
+                    if installed.is_empty() {
+                        println!(
+                            "\n  No plugins installed. Try:\n  {}\n",
+                            "llmention prompts install rust-crate".cyan()
+                        );
+                    } else {
+                        use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
+                        let mut table = Table::new();
+                        table.set_content_arrangement(ContentArrangement::Dynamic);
+                        table.set_header(vec![
+                            Cell::new("Name").add_attribute(Attribute::Bold),
+                            Cell::new("Version").add_attribute(Attribute::Bold),
+                            Cell::new("Description").add_attribute(Attribute::Bold),
+                            Cell::new("Author").add_attribute(Attribute::Bold),
+                        ]);
+                        for p in &installed {
+                            table.add_row(vec![
+                                Cell::new(&p.manifest.meta.name).fg(Color::Cyan),
+                                Cell::new(&p.manifest.meta.version).fg(Color::DarkGrey),
+                                Cell::new(&p.manifest.meta.description),
+                                Cell::new(&p.manifest.meta.author).fg(Color::DarkGrey),
+                            ]);
+                        }
+                        println!();
+                        println!("{table}");
+                    }
+                    println!(
+                        "\n  {}  Use {} to apply a plugin\n",
+                        "Tip".yellow().bold(),
+                        "--plugin <name>".cyan()
+                    );
+                }
+                Some(PluginAction::Enable { name }) => {
+                    if plugins::find_plugin(&base_dir, &name).is_some() {
+                        println!("\n  {}  Plugin {} is installed and ready.\n  Use {} to apply it.\n",
+                            "✓".green().bold(), name.cyan(),
+                            format!("--plugin {}", name).cyan());
+                    } else {
+                        println!("\n  {}  Plugin {} is not installed. Run:\n  {}\n",
+                            "!".yellow(), name.cyan(),
+                            format!("llmention prompts install {}", name).cyan());
+                    }
+                }
+                Some(PluginAction::Disable { name }) => {
+                    println!("\n  {}  Plugin {} will not be auto-applied (pass --plugin to use it explicitly).\n",
+                        "✓".green().bold(), name.cyan());
+                }
+            }
+        }
+
+        Commands::Prompts { action } => match action {
+            PromptMarketAction::List => {
+                use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
+                println!();
+                println!("  {}  {} available", "Community Templates".bold(),
+                    registry::BUILTIN_TEMPLATES.len().to_string().cyan());
+                println!("{}", "─".repeat(64).dimmed());
+                println!();
+                let mut table = Table::new();
+                table.set_content_arrangement(ContentArrangement::Dynamic);
+                table.set_header(vec![
+                    Cell::new("Name").add_attribute(Attribute::Bold),
+                    Cell::new("Description").add_attribute(Attribute::Bold),
+                    Cell::new("Tags").add_attribute(Attribute::Bold),
+                ]);
+                for t in registry::BUILTIN_TEMPLATES {
+                    table.add_row(vec![
+                        Cell::new(t.name).fg(Color::Cyan),
+                        Cell::new(t.description),
+                        Cell::new(t.tags.join(", ")).fg(Color::DarkGrey),
+                    ]);
+                }
+                println!("{table}");
+                println!(
+                    "\n  {}  llmention prompts install <name>\n",
+                    "→".cyan()
+                );
+            }
+            PromptMarketAction::Search { query } => {
+                use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
+                let results = registry::search_templates(&query);
+                println!();
+                println!("  {}  {} match(es) for \"{}\"",
+                    "Search".bold(), results.len().to_string().cyan(), query);
+                println!("{}", "─".repeat(64).dimmed());
+                if results.is_empty() {
+                    println!("\n  No templates matched your query.\n");
+                } else {
+                    println!();
+                    let mut table = Table::new();
+                    table.set_content_arrangement(ContentArrangement::Dynamic);
+                    table.set_header(vec![
+                        Cell::new("Name").add_attribute(Attribute::Bold),
+                        Cell::new("Description").add_attribute(Attribute::Bold),
+                        Cell::new("Tags").add_attribute(Attribute::Bold),
+                    ]);
+                    for t in results {
+                        table.add_row(vec![
+                            Cell::new(t.name).fg(Color::Cyan),
+                            Cell::new(t.description),
+                            Cell::new(t.tags.join(", ")).fg(Color::DarkGrey),
+                        ]);
+                    }
+                    println!("{table}");
+                    println!();
+                }
+            }
+            PromptMarketAction::Install { name } => {
+                match registry::find_template(&name) {
+                    None => {
+                        println!("\n  {}  Template {} not found. Run {} to see available templates.\n",
+                            "✗".red().bold(), name.cyan(), "llmention prompts list".cyan());
+                    }
+                    Some(info) => {
+                        let plugin_dir = base_dir.join("plugins").join(&name);
+                        std::fs::create_dir_all(&plugin_dir)?;
+
+                        let manifest = format!(
+                            "[meta]\nname = \"{}\"\nversion = \"1.0.0\"\ndescription = \"{}\"\nauthor = \"{}\"\ntags = [{}]\n\n[templates]\n{}{}\n",
+                            info.name,
+                            info.description,
+                            info.author,
+                            info.tags.iter().map(|t| format!("\"{}\"", t)).collect::<Vec<_>>().join(", "),
+                            builtin::generate_template(&name).map(|_| "generate = \"generate.prompt.md\"\n").unwrap_or(""),
+                            builtin::discover_template(&name).map(|_| "discover = \"discover.prompt.md\"\n").unwrap_or(""),
+                        );
+                        std::fs::write(plugin_dir.join("plugin.toml"), &manifest)?;
+
+                        if let Some(gen_tpl) = builtin::generate_template(&name) {
+                            std::fs::write(plugin_dir.join("generate.prompt.md"), gen_tpl)?;
+                        }
+                        if let Some(disc_tpl) = builtin::discover_template(&name) {
+                            std::fs::write(plugin_dir.join("discover.prompt.md"), disc_tpl)?;
+                        }
+
+                        println!("\n  {}  Installed {} to {}\n",
+                            "✓".green().bold(),
+                            name.cyan(),
+                            plugin_dir.display().to_string().dimmed());
+                        println!("  {}  Edit templates at:", "Tip".yellow().bold());
+                        println!("     {}", plugin_dir.display().to_string().cyan());
+                        println!("\n  {}  Use it with:\n  {}\n",
+                            "→".cyan(),
+                            format!("llmention generate \"...\" --plugin {} --about \"...\"", name).cyan());
+                    }
+                }
+            }
+        },
+
+        Commands::Share { domain, days, format } => {
+            let results = storage.query_domain(&domain, days)?;
+            if results.is_empty() {
+                println!("\n  {}  No data for {}. Run {} first.\n",
+                    "!".yellow(),
+                    domain.cyan(),
+                    format!("llmention audit {}", domain).cyan());
+            } else {
+                match format {
+                    ShareFormat::Json => print!("{}", report::render_share_json(&domain, &results, days)),
+                    ShareFormat::Markdown => print!("{}", report::render_share_markdown(&domain, &results, days)),
+                }
+            }
+        }
+
+        Commands::Stats { domain, days } => {
+            match domain {
+                None => {
+                    let domains = storage.list_domains()?;
+                    println!();
+                    println!("  {}  {} domain(s) tracked", "Stats".bold(), domains.len().to_string().cyan());
+                    println!("{}", "─".repeat(64).dimmed());
+                    if domains.is_empty() {
+                        println!("\n  No data yet. Run {} to start tracking.\n",
+                            "llmention audit <domain>".cyan());
+                    } else {
+                        for d in &domains {
+                            println!("  {}  {}", "·".dimmed(), d.cyan());
+                        }
+                        println!("\n  {}  llmention stats <domain>\n", "→".cyan());
+                    }
+                }
+                Some(domain) => {
+                    let stats = storage.domain_stats(&domain, days)?;
+                    report::print_stats(&domain, &stats, days);
+                }
+            }
+        }
+
+        Commands::Docs => {
+            print!("{}", generate_docs());
         }
 
         Commands::Config => run_config_command()?,
@@ -837,6 +1143,81 @@ fn load_prompts(path: Option<PathBuf>, domain: &str) -> Result<Vec<String>> {
 
 fn audit_prompts(domain: &str, niche: Option<&str>, competitor: Option<&str>) -> Vec<String> {
     prompts::default_prompts(domain, niche, competitor)
+}
+
+/// Resolve a generate system prompt template from a named plugin.
+/// Checks installed plugins first, then falls back to builtins.
+fn resolve_generate_template(name: Option<&str>, config_dir: &PathBuf) -> Option<String> {
+    let name = name?;
+    if let Some(plugin) = plugins::find_plugin(config_dir, name) {
+        if let Some(tpl) = plugin.generate_template() {
+            return Some(tpl);
+        }
+    }
+    builtin::generate_template(name).map(|s| s.to_string())
+}
+
+/// Resolve a discover system prompt template from a named plugin.
+fn resolve_discover_template(name: Option<&str>, config_dir: &PathBuf) -> Option<String> {
+    let name = name?;
+    if let Some(plugin) = plugins::find_plugin(config_dir, name) {
+        if let Some(tpl) = plugin.discover_template() {
+            return Some(tpl);
+        }
+    }
+    builtin::discover_template(name).map(|s| s.to_string())
+}
+
+fn generate_docs() -> String {
+    let mut out = String::from("# LLMention — Command Reference\n\n");
+    out.push_str("Local-first GEO (Generative Engine Optimization) agent for indie hackers.\n\n");
+    out.push_str("---\n\n");
+
+    let commands = [
+        ("audit", "Quick visibility scan using smart default prompts.",
+         "llmention audit myproject.com\nllmention audit myproject.com --niche \"Rust CLI tool\"\nllmention audit myproject.com --models ollama"),
+        ("track", "Run custom prompts from a file and record brand mentions.",
+         "llmention track myproject.com --prompts prompts.txt\nllmention track myproject.com --prompts prompts.json --models anthropic"),
+        ("report", "Show mention history and trends from the local database.",
+         "llmention report myproject.com\nllmention report myproject.com --days 30\nllmention report myproject.com --export csv > results.csv"),
+        ("generate", "Generate GEO-optimized markdown content for a target query.",
+         "llmention generate \"best rust cli tool\" --about \"myproject.io is a ...\"\nllmention generate \"...\" --plugin rust-crate --about \"...\"\nllmention generate \"...\" --evaluate"),
+        ("optimize", "5-step autonomous GEO agent: discover, audit, generate, evaluate.",
+         "llmention optimize myproject.com --niche \"Rust CLI tool\"\nllmention optimize myproject.com --niche \"...\" --steps 5 --auto-apply\nllmention optimize myproject.com --niche \"...\" --plugin rust-crate"),
+        ("projects", "Manage saved domain + niche pairs.",
+         "llmention projects\nllmention projects add myproject.com --niche \"Rust CLI tool\"\nllmention projects remove myproject.com"),
+        ("watch", "Background polling audit on a fixed interval.",
+         "llmention watch myproject.com --niche \"Rust CLI tool\"\nllmention watch myproject.com --interval 30 --models ollama"),
+        ("stats", "Personal usage trends and per-day breakdown.",
+         "llmention stats\nllmention stats myproject.com\nllmention stats myproject.com --days 30"),
+        ("share", "Export a shareable visibility report.",
+         "llmention share myproject.com\nllmention share myproject.com --days 30 > report.md\nllmention share myproject.com --format json > report.json"),
+        ("prompts", "Browse and install community prompt templates.",
+         "llmention prompts list\nllmention prompts search rust\nllmention prompts install rust-crate"),
+        ("plugins", "Manage installed plugins.",
+         "llmention plugins\nllmention plugins enable rust-crate\nllmention plugins disable rust-crate"),
+        ("config", "Create ~/.llmention/config.toml and show setup instructions.", "llmention config"),
+        ("doctor", "Verify config, providers, and Ollama connectivity.", "llmention doctor"),
+        ("docs", "Print this command reference as markdown.", "llmention docs > COMMANDS.md"),
+    ];
+
+    for (name, desc, examples) in &commands {
+        out.push_str(&format!("## `{}`\n\n{}\n\n", name, desc));
+        out.push_str("```bash\n");
+        out.push_str(examples);
+        out.push_str("\n```\n\n");
+    }
+
+    out.push_str("---\n\n");
+    out.push_str("## Global Flags\n\n");
+    out.push_str("| Flag | Description |\n");
+    out.push_str("|------|-------------|\n");
+    out.push_str("| `--models openai,anthropic` | Comma-separated provider list |\n");
+    out.push_str("| `--verbose` | Show raw LLM response previews |\n");
+    out.push_str("| `--quiet` | Suppress progress output (CI-friendly) |\n\n");
+    out.push_str("---\n\n");
+    out.push_str("_Generated by `llmention docs` — [LLMention](https://github.com/wiramahendra/llMention)_\n");
+    out
 }
 
 fn run_projects_list(storage: &Storage) -> anyhow::Result<()> {
