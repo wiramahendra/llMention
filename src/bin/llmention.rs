@@ -278,6 +278,11 @@ enum Commands {
     Doctor,
     /// Guided beginner flow — prints the recommended steps to get started
     Quickstart,
+    /// Interactive setup wizard — configure providers and run your first audit
+    ///
+    /// Examples:
+    ///   llmention init
+    Init,
 }
 
 #[derive(clap::Subcommand)]
@@ -899,6 +904,8 @@ async fn main() -> Result<()> {
         Commands::Docs => {
             print!("{}", generate_docs());
         }
+
+        Commands::Init => run_init()?,
 
         Commands::Config => run_config_command()?,
 
