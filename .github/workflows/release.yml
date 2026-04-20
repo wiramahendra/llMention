@@ -109,3 +109,48 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/checksums.txt
+
+  update-formula:
+    name: Update Homebrew Formula
+    needs: checksums
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download checksums
+        uses: robinraju/release-downloader@v1
+        with:
+          latest: false
+          tag: ${{ github.ref_name }}
+          out-file-path: "dist"
+          fileName: "checksums.txt"
+
+      - name: Update Formula SHA256s
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+
+          AARCH64_SHA=$(grep "llmention-macos-aarch64.tar.gz" dist/checksums.txt | awk '{print $1}')
+          X86_64_SHA=$(grep "llmention-macos-x86_64.tar.gz" dist/checksums.txt | awk '{print $1}')
+          LINUX_SHA=$(grep "llmention-linux-x86_64.tar.gz" dist/checksums.txt | awk '{print $1}')
+
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/llmention.rb
+          sed -i "s/PLACEHOLDER_AARCH64_SHA256/${AARCH64_SHA}/" Formula/llmention.rb
+          sed -i "s/PLACEHOLDER_X86_64_SHA256/${X86_64_SHA}/" Formula/llmention.rb
+          sed -i "s/PLACEHOLDER_LINUX_SHA256/${LINUX_SHA}/" Formula/llmention.rb
+
+          # Also replace already-filled SHA256s on re-release
+          sed -i "s/sha256 \"[a-f0-9]\{64\}\".*aarch64/sha256 \"${AARCH64_SHA}\" # aarch64/" Formula/llmention.rb || true
+
+          cat Formula/llmention.rb
+
+      - name: Commit updated formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/llmention.rb
+          git diff --staged --quiet || git commit -m "chore: update Homebrew formula for ${{ github.ref_name }}"
+          git push
