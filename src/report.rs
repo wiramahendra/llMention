@@ -4,7 +4,7 @@ use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
 use crate::{
     agent::plan::OptimizationPlan,
     geo::{evaluator::EvalDelta, generator::GenerateResult},
-    storage::DomainDayStat,
+    storage::{DomainDayStat, PublishSnapshot},
     types::{MentionResult, Position, Sentiment, TrackSummary},
 };
 
@@ -585,6 +585,97 @@ pub fn render_share_json(domain: &str, results: &[MentionResult], days: u32) -> 
         })).collect::<Vec<_>>(),
     })
     .to_string()
+}
+
+pub fn print_results(
+    domain: &str,
+    snapshots: &[PublishSnapshot],
+    current_rate: f64,
+    current_mentioned: usize,
+    current_total: usize,
+    all: bool,
+) {
+    println!();
+    println!("{}", "━".repeat(64).dimmed());
+    println!("  {}  {}", "Visibility Results:".bold(), domain.cyan().bold());
+    println!("{}", "━".repeat(64).dimmed());
+    println!();
+
+    let display: Vec<&PublishSnapshot> = if all {
+        snapshots.iter().collect()
+    } else {
+        snapshots.iter().take(1).collect()
+    };
+
+    for snap in &display {
+        let ts = chrono::DateTime::parse_from_rfc3339(&snap.timestamp)
+            .map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string())
+            .unwrap_or_else(|_| snap.timestamp.clone());
+
+        let delta = current_rate - snap.mention_rate;
+        let (delta_str, delta_color) = if delta > 2.0 {
+            (format!("+{:.0}pp", delta), "green")
+        } else if delta < -2.0 {
+            (format!("{:.0}pp", delta), "red")
+        } else {
+            ("~0pp".to_string(), "yellow")
+        };
+
+        println!("  {}  {}", "Checkpoint".bold(), ts.dimmed());
+        if let Some(note) = &snap.note {
+            println!("  {}  {}", "Note:".dimmed(), note);
+        }
+        println!();
+
+        let mut table = Table::new();
+        table.set_content_arrangement(ContentArrangement::Dynamic);
+        table.set_header(vec![
+            Cell::new("").add_attribute(Attribute::Bold),
+            Cell::new("Mention rate").add_attribute(Attribute::Bold),
+            Cell::new("Mentions").add_attribute(Attribute::Bold),
+            Cell::new("Queries").add_attribute(Attribute::Bold),
+        ]);
+        table.add_row(vec![
+            Cell::new("At publish").fg(Color::DarkGrey),
+            Cell::new(format!("{:.0}%", snap.mention_rate)).fg(Color::DarkGrey),
+            Cell::new(snap.mention_count).fg(Color::DarkGrey),
+            Cell::new(snap.total_queries).fg(Color::DarkGrey),
+        ]);
+        table.add_row(vec![
+            Cell::new("Now (last 7d)").fg(Color::Cyan),
+            Cell::new(format!("{:.0}%", current_rate)).fg(Color::Cyan),
+            Cell::new(current_mentioned).fg(Color::Cyan),
+            Cell::new(current_total).fg(Color::Cyan),
+        ]);
+        println!("{table}");
+        println!();
+
+        let lift_cell = match delta_color {
+            "green" => delta_str.green().bold().to_string(),
+            "red" => delta_str.red().bold().to_string(),
+            _ => delta_str.yellow().bold().to_string(),
+        };
+        println!("  {}  Lift since publish: {}", "→".cyan(), lift_cell);
+
+        if delta > 2.0 {
+            println!("  {}  Mention rate improved — your published content is being cited.", "✓".green());
+        } else if delta < -2.0 {
+            println!("  {}  Mention rate dropped. Re-run optimize and publish updated content.", "!".yellow());
+        } else {
+            println!("  {}  No significant change yet. Models may not have been retrained.", "~".dimmed());
+            println!("       Wait a few more days and re-audit.");
+        }
+        println!();
+    }
+
+    if !all && snapshots.len() > 1 {
+        println!(
+            "  {}  {} older checkpoint(s) — run {} to see all.\n",
+            "→".cyan(),
+            snapshots.len() - 1,
+            format!("llmention results {} --all", domain).cyan()
+        );
+    }
 }
 
 fn csv_escape(s: &str) -> String {
