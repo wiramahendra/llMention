@@ -977,6 +977,7 @@ fn run_config_command() -> Result<()> {
     println!("  {}", "Supported providers:".bold());
     println!("    {}  openai     — gpt-4o-mini, gpt-4o, …", "·".dimmed());
     println!("    {}  anthropic  — claude-3-5-haiku, claude-3-5-sonnet, …", "·".dimmed());
+    println!("    {}  gemini     — gemini-2.0-flash, gemini-1.5-pro  (Google)", "·".dimmed());
     println!("    {}  xai        — grok-2-latest  (x.ai)", "·".dimmed());
     println!("    {}  perplexity — sonar, sonar-pro  (web-search grounded)", "·".dimmed());
     println!(
@@ -1043,6 +1044,16 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
         }
         Some(_) => println!("  {}  perplexity disabled", "–".dimmed()),
         None => println!("  {}  perplexity not configured", "–".dimmed()),
+    }
+
+    // Gemini
+    match &config.providers.gemini {
+        Some(c) if c.enabled => {
+            any_enabled = true;
+            println!("  {}  gemini    {} ({})", "✓".green(), "enabled".green(), c.model.dimmed());
+        }
+        Some(_) => println!("  {}  gemini    disabled", "–".dimmed()),
+        None => println!("  {}  gemini    not configured", "–".dimmed()),
     }
 
     // xAI
