@@ -7,6 +7,7 @@ pub mod parser;
 pub mod plugins;
 pub mod providers;
 pub mod report;
+pub mod scheduler;
 pub mod storage;
 pub mod tracker;
 pub mod tui;
