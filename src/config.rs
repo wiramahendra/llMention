@@ -19,6 +19,7 @@ pub struct Config {
 pub struct ProvidersConfig {
     pub openai: Option<ProviderConfig>,
     pub anthropic: Option<ProviderConfig>,
+    pub gemini: Option<ProviderConfig>,
     pub xai: Option<ProviderConfig>,
     pub perplexity: Option<ProviderConfig>,
     pub ollama: Option<OllamaConfig>,
@@ -158,6 +159,12 @@ temperature = 0
 api_key     = "sk-ant-..."
 model       = "claude-3-5-haiku-20241022"
 enabled     = true
+temperature = 0
+
+[providers.gemini]
+api_key     = "AIza..."
+model       = "gemini-2.0-flash"
+enabled     = false
 temperature = 0
 
 [providers.xai]
