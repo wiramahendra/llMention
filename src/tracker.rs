@@ -12,8 +12,8 @@ use crate::{
     config::Config,
     parser,
     providers::{
-        anthropic::AnthropicProvider, ollama::OllamaProvider, openai::OpenAiProvider,
-        perplexity::PerplexityProvider, xai::XaiProvider, LlmProvider,
+        anthropic::AnthropicProvider, gemini::GeminiProvider, ollama::OllamaProvider,
+        openai::OpenAiProvider, perplexity::PerplexityProvider, xai::XaiProvider, LlmProvider,
     },
     storage::Storage,
     types::{MentionResult, TrackSummary},
@@ -26,6 +26,9 @@ pub fn build_providers(config: &Config) -> Vec<Arc<dyn LlmProvider>> {
     }
     if let Some(c) = &config.providers.anthropic {
         if c.enabled { v.push(Arc::new(AnthropicProvider::new(c.clone()))); }
+    }
+    if let Some(c) = &config.providers.gemini {
+        if c.enabled { v.push(Arc::new(GeminiProvider::new(c.clone()))); }
     }
     if let Some(c) = &config.providers.xai {
         if c.enabled { v.push(Arc::new(XaiProvider::new(c.clone()))); }
