@@ -949,6 +949,164 @@ fn no_providers_error() -> ! {
     std::process::exit(1);
 }
 
+fn run_init() -> Result<()> {
+    use std::io::{self, BufRead, Write};
+
+    let (dir, _) = Config::ensure_dir()?;
+    let path = llmention::config::config_path();
+
+    println!();
+    println!("{}", "LLMention Setup Wizard".bold());
+    println!("{}", "━".repeat(56).dimmed());
+    println!();
+    println!("  I'll help you configure at least one LLM provider.");
+    println!("  Press Enter to skip any provider.");
+    println!();
+
+    let stdin = io::stdin();
+    let mut lines = stdin.lock().lines();
+
+    macro_rules! ask {
+        ($prompt:expr) => {{
+            print!("  {}", $prompt);
+            io::stdout().flush().ok();
+            lines.next().unwrap_or(Ok(String::new())).unwrap_or_default().trim().to_string()
+        }};
+    }
+
+    // ── OpenAI ───────────────────────────────────────────────────────────────
+    println!("  {}  OpenAI  (gpt-4o-mini)", "①".cyan());
+    let openai_key = ask!("  API key (sk-...): ");
+    let openai_block = if !openai_key.is_empty() {
+        format!(
+            "[providers.openai]\napi_key     = \"{}\"\nmodel       = \"gpt-4o-mini\"\nenabled     = true\ntemperature = 0\n",
+            openai_key
+        )
+    } else {
+        String::new()
+    };
+
+    // ── Anthropic ────────────────────────────────────────────────────────────
+    println!();
+    println!("  {}  Anthropic  (claude-3-5-haiku)", "②".cyan());
+    let anthropic_key = ask!("  API key (sk-ant-...): ");
+    let anthropic_block = if !anthropic_key.is_empty() {
+        format!(
+            "[providers.anthropic]\napi_key     = \"{}\"\nmodel       = \"claude-3-5-haiku-20241022\"\nenabled     = true\ntemperature = 0\n",
+            anthropic_key
+        )
+    } else {
+        String::new()
+    };
+
+    // ── Gemini ───────────────────────────────────────────────────────────────
+    println!();
+    println!("  {}  Google Gemini  (gemini-2.0-flash — includes AI Overviews context)", "③".cyan());
+    let gemini_key = ask!("  API key (AIza...): ");
+    let gemini_block = if !gemini_key.is_empty() {
+        format!(
+            "[providers.gemini]\napi_key     = \"{}\"\nmodel       = \"gemini-2.0-flash\"\nenabled     = true\ntemperature = 0\n",
+            gemini_key
+        )
+    } else {
+        String::new()
+    };
+
+    // ── Ollama ───────────────────────────────────────────────────────────────
+    println!();
+    println!("  {}  Ollama  (local, free — requires ollama serve)", "④".cyan());
+    let use_ollama = ask!("  Enable Ollama? [y/N]: ");
+    let ollama_model = if use_ollama.to_lowercase().starts_with('y') {
+        let m = ask!("  Model name [llama3.2]: ");
+        if m.is_empty() { "llama3.2".to_string() } else { m }
+    } else {
+        String::new()
+    };
+    let ollama_block = if !ollama_model.is_empty() {
+        format!(
+            "[providers.ollama]\nbase_url  = \"http://localhost:11434\"\nmodel     = \"{}\"\nenabled   = true\n",
+            ollama_model
+        )
+    } else {
+        String::new()
+    };
+
+    let any_configured = !openai_block.is_empty()
+        || !anthropic_block.is_empty()
+        || !gemini_block.is_empty()
+        || !ollama_block.is_empty();
+
+    if !any_configured {
+        println!();
+        println!("  {}  No providers configured. Edit {} manually to add keys.", "!".yellow(), path.display().to_string().cyan());
+        println!();
+        return Ok(());
+    }
+
+    // Build the config file
+    let mut content = String::from("# LLMention configuration — ~/.llmention/config.toml\n\n");
+    for block in [&openai_block, &anthropic_block, &gemini_block, &ollama_block] {
+        if !block.is_empty() {
+            content.push_str(block);
+            content.push('\n');
+        }
+    }
+    content.push_str("[judge]\nenabled   = false\nbase_url  = \"http://localhost:11434\"\nmodel     = \"llama3.2\"\n\n");
+    content.push_str("[defaults]\ndays        = 7\nconcurrency = 5\n");
+
+    std::fs::write(&path, &content)?;
+
+    println!();
+    println!("  {}  Config written to {}", "✓".green().bold(), path.display().to_string().cyan());
+
+    // ── First domain ─────────────────────────────────────────────────────────
+    println!();
+    println!("  {}  What domain do you want to track first?", "⑤".cyan());
+    let domain = ask!("  Domain (e.g. myproject.com): ");
+    let niche  = if !domain.is_empty() {
+        ask!("  Niche (e.g. \"Rust CLI tool\"): ")
+    } else {
+        String::new()
+    };
+
+    println!();
+    println!("{}", "━".repeat(56).dimmed());
+    println!();
+    println!("  {}  Setup complete! Here's what to do next:", "✓".green().bold());
+    println!();
+
+    if !domain.is_empty() {
+        let niche_flag = if !niche.is_empty() {
+            format!(" --niche \"{}\"", niche)
+        } else {
+            String::new()
+        };
+        println!(
+            "  {}  Run your first audit:",
+            "1.".bold()
+        );
+        println!("      {}", format!("llmention audit {}{}", domain, niche_flag).cyan());
+        println!();
+        println!("  {}  Run the optimizer (generates GEO content):", "2.".bold());
+        println!("      {}", format!("llmention optimize {}{} --auto-apply", domain, niche_flag).cyan());
+
+        // Save as a project
+        let storage = Storage::open(&dir)?;
+        let _ = storage.upsert_project(
+            &domain,
+            if niche.is_empty() { None } else { Some(niche.as_str()) },
+            None,
+        );
+        println!();
+        println!("  {}  Saved {} as a project.", "✓".green(), domain.cyan());
+    } else {
+        println!("  {}  llmention audit <your-domain> --niche \"your niche\"", "→".cyan());
+    }
+
+    println!();
+    Ok(())
+}
+
 fn run_config_command() -> Result<()> {
     let (dir, _) = Config::ensure_dir()?;
     let path = llmention::config::config_path();
