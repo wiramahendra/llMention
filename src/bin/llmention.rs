@@ -737,6 +737,20 @@ async fn main() -> Result<()> {
                             summary.mention_count,
                             summary.total_queries
                         );
+                        // Notify on significant drops
+                        if let Some(p) = prev_rate {
+                            if p - rate > 5.0 {
+                                scheduler::notify(
+                                    "LLMention — Visibility Drop",
+                                    &format!(
+                                        "{}: mention rate dropped {:.0}pp to {:.0}%",
+                                        domain,
+                                        p - rate,
+                                        rate
+                                    ),
+                                );
+                            }
+                        }
                         let _ = storage.touch_project_last_audited(&domain);
                         prev_rate = Some(rate);
                     }
@@ -954,6 +968,75 @@ async fn main() -> Result<()> {
         }
 
         Commands::Init => run_init()?,
+
+        Commands::Schedule { domain, niche, interval, uninstall } => {
+            let parsed_interval = match interval.as_str() {
+                "daily" => scheduler::ScheduleInterval::Daily,
+                "weekly" => scheduler::ScheduleInterval::Weekly,
+                h => match h.parse::<u32>() {
+                    Ok(n) if n > 0 => scheduler::ScheduleInterval::Custom(n),
+                    _ => {
+                        eprintln!("  {} Unknown interval '{}'. Use daily, weekly, or a number of hours.", "Error:".red().bold(), h);
+                        std::process::exit(1);
+                    }
+                }
+            };
+
+            let binary_path = std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "llmention".to_string());
+
+            #[cfg(target_os = "macos")]
+            {
+                let label = format!("com.llmention.audit.{}", domain.replace('.', "_"));
+                let plist_path = dirs::home_dir()
+                    .unwrap_or_default()
+                    .join("Library/LaunchAgents")
+                    .join(format!("{}.plist", label));
+
+                if uninstall {
+                    if plist_path.exists() {
+                        let _ = std::process::Command::new("launchctl")
+                            .args(["unload", &plist_path.display().to_string()])
+                            .output();
+                        std::fs::remove_file(&plist_path)?;
+                        println!("\n  {}  Scheduled audit for {} removed.\n", "✓".green().bold(), domain.cyan());
+                    } else {
+                        println!("\n  {}  No scheduled job found for {}.\n", "!".yellow(), domain.cyan());
+                    }
+                } else {
+                    let path = scheduler::install_launchd(&domain, niche.as_deref(), parsed_interval, &binary_path)?;
+                    let _ = std::process::Command::new("launchctl")
+                        .args(["load", &path.display().to_string()])
+                        .output();
+                    println!();
+                    println!("  {}  Scheduled {} audit for {}", "✓".green().bold(), parsed_interval.label().cyan(), domain.cyan());
+                    println!("  {}  Plist: {}", "→".cyan(), path.display().to_string().dimmed());
+                    println!("  {}  Logs:  {}", "→".cyan(), format!("/tmp/llmention-{}.log", domain.replace('.', "_")).dimmed());
+                    println!();
+                    println!("  {}  macOS will notify you if the mention rate drops >5pp.", "Tip".yellow().bold());
+                    println!("  {}  To remove: {}\n", "→".cyan(), format!("llmention schedule {} --uninstall", domain).cyan());
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                if uninstall {
+                    println!("\n  {}  On Linux, remove the cron entry manually with {}\n", "→".cyan(), "crontab -e".cyan());
+                } else {
+                    let line = scheduler::cron_line(&domain, niche.as_deref(), parsed_interval, &binary_path);
+                    println!();
+                    println!("  {}  Add this line to your crontab ({}):", "→".cyan(), "crontab -e".cyan());
+                    println!();
+                    println!("  {}", line.cyan());
+                    println!();
+                    println!("  {}  Logs will be appended to {}\n",
+                        "→".cyan(),
+                        format!("/tmp/llmention-{}.log", domain.replace('.', "_")).dimmed());
+                }
+                let _ = parsed_interval;
+            }
+        }
 
         Commands::Publish { domain, note } => {
             let (rate, mentioned, total) = storage.current_mention_stats(&domain)?;
