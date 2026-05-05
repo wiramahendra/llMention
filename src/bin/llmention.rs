@@ -115,6 +115,28 @@ enum Commands {
     ///   llmention audit compare --before 1 --after 2  # Compare two runs
     #[command(subcommand)]
     Audit(AuditCommand),
+    /// Quick audit using 12 smart default prompts — legacy mode
+    ///
+    /// This is the legacy audit command. For evidence-based audits,
+    /// use: llmention audit run
+    ///
+    /// Examples:
+    ///   llmention audit-legacy myproject.com
+    ///   llmention audit-legacy myproject.com --niche "CLI tool"
+    #[command(name = "audit-legacy")]
+    AuditLegacy {
+        /// Domain or brand to audit
+        domain: String,
+        /// Product niche for smarter prompt generation
+        #[arg(long)]
+        niche: Option<String>,
+        /// Main competitor for comparison prompts
+        #[arg(long)]
+        competitor: Option<String>,
+        /// Re-evaluate each response with a local LLM
+        #[arg(long)]
+        judge: bool,
+    },
     /// Show mention history and trends from the local database (legacy)
     ///
     /// For the new evidence-based reports, use: llmention report
@@ -354,50 +376,7 @@ enum Commands {
         #[arg(long)]
         all: bool,
     },
-    /// Initialize project (deprecated alias - use 'init')
-    #[command(name = "init2", hide = true)]
-    Init2Deprecated {
-        /// Project name
-        #[arg(short, long)]
-        name: Option<String>,
-        /// Project website
-        #[arg(short, long)]
-        website: Option<String>,
-        /// Project category/niche
-        #[arg(short, long)]
-        category: Option<String>,
-        /// Skip interactive prompts
-        #[arg(long)]
-        yes: bool,
-        /// Overwrite existing config
-        #[arg(long)]
-        force: bool,
-    },
-    /// Manage prompts (deprecated alias - use 'prompts')
-    #[command(name = "prompts2", hide = true)]
-    Prompts2Deprecated(Prompts2Command),
-    /// Run audits (deprecated alias - use 'audit')
-    #[command(name = "audit2", hide = true)]
-    Audit2Deprecated(Audit2Command),
-    /// Generate report (deprecated alias - use 'report')
-    #[command(name = "report2", hide = true)]
-    Report2Deprecated {
-        /// Audit run ID (latest if not specified)
-        #[arg(short, long)]
-        run: Option<i64>,
-        /// Output format
-        #[arg(short, long, default_value = "markdown")]
-        format: String,
-        /// Output directory
-        #[arg(short, long, default_value = "reports")]
-        output: PathBuf,
-        /// Include full raw responses
-        #[arg(long)]
-        full: bool,
-        /// Force overwrite existing report
-        #[arg(long)]
-        force: bool,
-    },
+
     /// Generate evidence-based markdown report from audit results
     ///
     /// Creates a comprehensive report with metrics, citations, competitor analysis,
@@ -1308,11 +1287,6 @@ async fn main() -> Result<()> {
             run_init2(name, website, category, yes, force)?;
         }
 
-        Commands::Init2Deprecated { name, website, category, yes, force } => {
-            eprintln!("{} 'init2' is deprecated. Use 'llmention init' instead.", "Warning:".yellow());
-            run_init2(name, website, category, yes, force)?;
-        }
-
         Commands::Prompts(prompt_cmd) => {
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
@@ -1343,37 +1317,6 @@ async fn main() -> Result<()> {
                 }
                 PromptsCommand::Templates(template_cmd) => {
                     run_prompts_templates(&base_dir, template_cmd).await?;
-                }
-            }
-        }
-
-        Commands::Prompts2Deprecated(prompt_cmd) => {
-            eprintln!("{} 'prompts2' is deprecated. Use 'llmention prompts' instead.", "Warning:".yellow());
-            // Load project config
-            let (project, _project_dir) = match ProjectConfig::find_and_load() {
-                Ok(Some((p, d))) => (p, d),
-                Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
-                        "!".yellow(),
-                        "llmention init".cyan()
-                    );
-                    std::process::exit(1);
-                }
-                Err(e) => {
-                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
-                    std::process::exit(1);
-                }
-            };
-
-            let storage_path = base_dir.join("evidence.db");
-            let storage = AuditStorage::open(&storage_path)?;
-
-            match prompt_cmd {
-                Prompts2Command::Discover { limit } => {
-                    run_prompts_discover(&project, &storage, limit).await?;
-                }
-                Prompts2Command::List => {
-                    run_prompts_list(&project, &storage)?;
                 }
             }
         }
@@ -1411,40 +1354,6 @@ async fn main() -> Result<()> {
                 }
                 AuditCommand::Compare { before, after, format } => {
                     run_compare(&storage, before, after, &format).await?;
-                }
-            }
-        }
-
-        Commands::Audit2Deprecated(audit_cmd) => {
-            eprintln!("{} 'audit2' is deprecated. Use 'llmention audit' instead.", "Warning:".yellow());
-            // Load project config
-            let (project, _project_dir) = match ProjectConfig::find_and_load() {
-                Ok(Some((p, d))) => (p, d),
-                Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
-                        "!".yellow(),
-                        "llmention init".cyan()
-                    );
-                    std::process::exit(1);
-                }
-                Err(e) => {
-                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
-                    std::process::exit(1);
-                }
-            };
-
-            let storage_path = base_dir.join("evidence.db");
-            let storage = AuditStorage::open(&storage_path)?;
-
-            match audit_cmd {
-                Audit2Command::Run { samples, temperature, models, json } => {
-                    run_audit_run(&project, &config, &storage, samples, temperature, models, json).await?;
-                }
-                Audit2Command::List { limit } => {
-                    run_audit_list(&project, &storage, limit)?;
-                }
-                Audit2Command::Show { id } => {
-                    run_audit_show(&storage, id)?;
                 }
             }
         }
@@ -1532,30 +1441,6 @@ async fn main() -> Result<()> {
             run_generate2(&project, &storage, &from_audit, output, force)?;
         }
 
-        Commands::Generate2Deprecated { from_audit, output, force } => {
-            eprintln!("{} 'generate2' is deprecated. Use 'llmention generate' instead.", "Warning:".yellow());
-            // Load project config
-            let (project, _project_dir) = match ProjectConfig::find_and_load() {
-                Ok(Some((p, d))) => (p, d),
-                Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
-                        "!".yellow(),
-                        "llmention init".cyan()
-                    );
-                    std::process::exit(1);
-                }
-                Err(e) => {
-                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
-                    std::process::exit(1);
-                }
-            };
-
-            let storage_path = base_dir.join("evidence.db");
-            let storage = AuditStorage::open(&storage_path)?;
-
-            run_generate2(&project, &storage, &from_audit, output, force)?;
-        }
-
         Commands::GenerateLegacy { prompt, about, niche, output, evaluate, plugin } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
@@ -1626,11 +1511,6 @@ async fn main() -> Result<()> {
         }
 
         Commands::Diagnose { url } => {
-            run_diagnose2(&url).await?;
-        }
-
-        Commands::Diagnose2Deprecated { url } => {
-            eprintln!("{} 'diagnose2' is deprecated. Use 'llmention diagnose' instead.", "Warning:".yellow());
             run_diagnose2(&url).await?;
         }
     }
@@ -2401,6 +2281,112 @@ fn run_prompts_list(
     }
     println!();
 
+    Ok(())
+}
+
+async fn run_prompts_templates(
+    base_dir: &PathBuf,
+    template_cmd: PromptTemplatesCommand,
+) -> Result<()> {
+    use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
+    use llmention::marketplace::{builtin, registry};
+
+    match template_cmd {
+        PromptTemplatesCommand::List => {
+            println!();
+            println!("  {}  {} available", "Community Templates".bold(),
+                registry::BUILTIN_TEMPLATES.len().to_string().cyan());
+            println!("{}", "─".repeat(64).dimmed());
+            println!();
+            let mut table = Table::new();
+            table.set_content_arrangement(ContentArrangement::Dynamic);
+            table.set_header(vec![
+                Cell::new("Name").add_attribute(Attribute::Bold),
+                Cell::new("Description").add_attribute(Attribute::Bold),
+                Cell::new("Tags").add_attribute(Attribute::Bold),
+            ]);
+            for t in registry::BUILTIN_TEMPLATES {
+                table.add_row(vec![
+                    Cell::new(t.name).fg(Color::Cyan),
+                    Cell::new(t.description),
+                    Cell::new(t.tags.join(", ")).fg(Color::DarkGrey),
+                ]);
+            }
+            println!("{table}");
+            println!(
+                "\n  {}  llmention prompts templates install <name>\n",
+                "→".cyan()
+            );
+        }
+        PromptTemplatesCommand::Search { query } => {
+            let results = registry::search_templates(&query);
+            println!();
+            println!("  {}  {} match(es) for \"{}\"",
+                "Search".bold(), results.len().to_string().cyan(), query);
+            println!("{}", "─".repeat(64).dimmed());
+            if results.is_empty() {
+                println!("\n  No templates matched your query.\n");
+            } else {
+                println!();
+                let mut table = Table::new();
+                table.set_content_arrangement(ContentArrangement::Dynamic);
+                table.set_header(vec![
+                    Cell::new("Name").add_attribute(Attribute::Bold),
+                    Cell::new("Description").add_attribute(Attribute::Bold),
+                    Cell::new("Tags").add_attribute(Attribute::Bold),
+                ]);
+                for t in results {
+                    table.add_row(vec![
+                        Cell::new(t.name).fg(Color::Cyan),
+                        Cell::new(t.description),
+                        Cell::new(t.tags.join(", ")).fg(Color::DarkGrey),
+                    ]);
+                }
+                println!("{table}");
+                println!();
+            }
+        }
+        PromptTemplatesCommand::Install { name } => {
+            match registry::find_template(&name) {
+                None => {
+                    println!("\n  {}  Template {} not found. Run {} to see available templates.\n",
+                        "✗".red().bold(), name.cyan(), "llmention prompts templates list".cyan());
+                }
+                Some(info) => {
+                    let plugin_dir = base_dir.join("plugins").join(&name);
+                    std::fs::create_dir_all(&plugin_dir)?;
+
+                    let manifest = format!(
+                        "[meta]\nname = \"{}\"\nversion = \"1.0.0\"\ndescription = \"{}\"\nauthor = \"{}\"\ntags = [{}]\n\n[templates]\n{}{}\n",
+                        info.name,
+                        info.description,
+                        info.author,
+                        info.tags.iter().map(|t| format!("\"{}\"", t)).collect::<Vec<_>>().join(", "),
+                        builtin::generate_template(&name).map(|_| "generate = \"generate.prompt.md\"\n").unwrap_or(""),
+                        builtin::discover_template(&name).map(|_| "discover = \"discover.prompt.md\"\n").unwrap_or(""),
+                    );
+                    std::fs::write(plugin_dir.join("plugin.toml"), &manifest)?;
+
+                    if let Some(gen_tpl) = builtin::generate_template(&name) {
+                        std::fs::write(plugin_dir.join("generate.prompt.md"), gen_tpl)?;
+                    }
+                    if let Some(disc_tpl) = builtin::discover_template(&name) {
+                        std::fs::write(plugin_dir.join("discover.prompt.md"), disc_tpl)?;
+                    }
+
+                    println!("\n  {}  Installed {} to {}\n",
+                        "✓".green().bold(),
+                        name.cyan(),
+                        plugin_dir.display().to_string().dimmed());
+                    println!("  {}  Edit templates at:", "Tip".yellow().bold());
+                    println!("     {}", plugin_dir.display().to_string().cyan());
+                    println!("\n  {}  Use it with:\n  {}\n",
+                        "→".cyan(),
+                        format!("llmention generate-legacy \"...\" --plugin {} --about \"...\"", name).cyan());
+                }
+            }
+        }
+    }
     Ok(())
 }
 
