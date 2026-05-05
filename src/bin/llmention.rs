@@ -2710,7 +2710,7 @@ async fn run_audit_run(
         println!();
         println!(
             "  Next: {} to generate content",
-            "llmention generate2".cyan()
+            "llmention generate".cyan()
         );
         println!();
     }
@@ -2792,7 +2792,7 @@ fn run_audit_show(storage: &AuditStorage, id: i64) -> Result<()> {
             println!("  Started:     {}", r.started_at.dimmed());
             println!("  Status:      {}", r.status);
             println!("  Samples:     {}", r.samples_per_prompt);
-            println!("  Temperature: {}", r.temperature);
+            println!("  Temperature: {:.2}", r.temperature);
             println!();
             println!("  Results:     {} row(s)", results.len());
             println!();
@@ -3181,7 +3181,7 @@ async fn run_diagnose2(url: &str) -> Result<()> {
         }
         _ => {
             println!(
-                "  {} llms.txt not found (generate with: llmention generate2)",
+                "  {} llms.txt not found (generate with: llmention generate)",
                 "○".dimmed()
             );
         }
