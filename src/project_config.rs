@@ -87,9 +87,15 @@ impl Default for AuditConfig {
     }
 }
 
-fn default_samples() -> usize { 3 }
-fn default_temperature() -> f32 { 0.2 }
-fn default_true() -> bool { true }
+fn default_samples() -> usize {
+    3
+}
+fn default_temperature() -> f32 {
+    0.2
+}
+fn default_true() -> bool {
+    true
+}
 
 impl ProjectConfig {
     /// Load project config from llmention.toml in the given directory
@@ -127,8 +133,8 @@ impl ProjectConfig {
     /// Save project config to llmention.toml in the given directory
     pub fn save_to_dir(&self, dir: &Path) -> Result<PathBuf> {
         let path = dir.join("llmention.toml");
-        let contents = toml::to_string_pretty(self)
-            .context("Failed to serialize project config")?;
+        let contents =
+            toml::to_string_pretty(self).context("Failed to serialize project config")?;
         std::fs::write(&path, contents)
             .with_context(|| format!("Failed to write {}", path.display()))?;
         Ok(path)
