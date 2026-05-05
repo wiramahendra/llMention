@@ -114,7 +114,12 @@ async fn collect_eval_results(
         match handle.await {
             Ok((model, Ok(response))) => {
                 let (would_cite, confidence, reason) = parse_eval_json(&response);
-                results.push(EvalResult { model, would_cite, confidence, reason });
+                results.push(EvalResult {
+                    model,
+                    would_cite,
+                    confidence,
+                    reason,
+                });
             }
             Ok((model, Err(e))) => {
                 eprintln!("  [{}] eval error: {}", model, e);
@@ -137,7 +142,9 @@ fn parse_eval_json(response: &str) -> (bool, f64, Option<String>) {
     let lower = response.to_lowercase();
     let would_cite = lower.contains("\"would_cite\": true")
         || lower.contains("\"would_cite\":true")
-        || (lower.contains("would cite") && !lower.contains("not cite") && !lower.contains("wouldn't"));
+        || (lower.contains("would cite")
+            && !lower.contains("not cite")
+            && !lower.contains("wouldn't"));
     (would_cite, 0.5, None)
 }
 
