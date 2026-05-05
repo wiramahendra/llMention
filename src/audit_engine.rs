@@ -131,7 +131,7 @@ impl AuditEngine {
         for (prompt_idx, prompt) in prompts.iter().enumerate() {
             let prompt_id = stored_prompt_ids[prompt_idx];
 
-            for (provider_idx, provider) in self.providers.iter().enumerate() {
+            for provider in &self.providers {
                 for sample_idx in 0..self.options.samples_per_prompt {
                     let provider = Arc::clone(provider);
                     let prompt_text = prompt.text.clone();
