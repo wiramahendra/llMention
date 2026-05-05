@@ -26,7 +26,10 @@ impl MockProvider {
         let pattern = pattern.into();
         let response = response.into();
         let mut responses = self.responses.lock().unwrap();
-        responses.entry(pattern).or_insert_with(Vec::new).push(response);
+        responses
+            .entry(pattern)
+            .or_insert_with(Vec::new)
+            .push(response);
         drop(responses);
         self
     }
@@ -48,19 +51,25 @@ impl MockProvider {
 
     fn find_response(&self, prompt: &str) -> String {
         let responses = self.responses.lock().unwrap();
-        
+
         // Try exact match first
         if let Some(resp) = responses.get(prompt) {
-            return resp.get(0).cloned().unwrap_or_else(|| self.default_response.clone());
+            return resp
+                .get(0)
+                .cloned()
+                .unwrap_or_else(|| self.default_response.clone());
         }
-        
+
         // Try substring match
         for (pattern, resp) in responses.iter() {
             if prompt.to_lowercase().contains(&pattern.to_lowercase()) {
-                return resp.get(0).cloned().unwrap_or_else(|| self.default_response.clone());
+                return resp
+                    .get(0)
+                    .cloned()
+                    .unwrap_or_else(|| self.default_response.clone());
             }
         }
-        
+
         self.default_response.clone()
     }
 }
@@ -71,11 +80,7 @@ impl LlmProvider for MockProvider {
         &self.name
     }
 
-    async fn query_with_system(
-        &self,
-        _system: Option<&str>,
-        prompt: &str,
-    ) -> Result<String> {
+    async fn query_with_system(&self, _system: Option<&str>, prompt: &str) -> Result<String> {
         Ok(self.find_response(prompt))
     }
 }
@@ -101,10 +106,9 @@ impl MockProviderBuilder {
              I would definitely recommend using {} for your project.",
             project, project, project
         );
-        self.provider = self.provider.with_response(
-            project.to_lowercase(),
-            response
-        );
+        self.provider = self
+            .provider
+            .with_response(project.to_lowercase(), response);
         self
     }
 
@@ -118,9 +122,14 @@ impl MockProviderBuilder {
     }
 
     /// Add a response with varied responses for sampling
-    pub fn with_varied_responses(mut self, pattern: &str, mention_count: usize, total_samples: usize) -> Self {
+    pub fn with_varied_responses(
+        mut self,
+        pattern: &str,
+        mention_count: usize,
+        total_samples: usize,
+    ) -> Self {
         let mut responses = Vec::new();
-        
+
         for i in 0..total_samples {
             let response = if i < mention_count {
                 format!(
@@ -137,12 +146,16 @@ impl MockProviderBuilder {
             };
             responses.push(response);
         }
-        
+
         self.provider = self.provider.with_responses(pattern.to_string(), responses);
         self
     }
 
-    pub fn with_response(mut self, pattern: impl Into<String>, response: impl Into<String>) -> Self {
+    pub fn with_response(
+        mut self,
+        pattern: impl Into<String>,
+        response: impl Into<String>,
+    ) -> Self {
         self.provider = self.provider.with_response(pattern, response);
         self
     }
@@ -205,7 +218,7 @@ mod tests {
         let provider = MockProviderBuilder::new("test")
             .with_response("hello", "world")
             .build();
-        
+
         let response = provider.query("hello").await.unwrap();
         assert_eq!(response, "world");
     }
@@ -215,7 +228,7 @@ mod tests {
         let provider = MockProviderBuilder::new("test")
             .with_default_response("default response")
             .build();
-        
+
         let response = provider.query("unknown prompt").await.unwrap();
         assert_eq!(response, "default response");
     }
@@ -225,7 +238,7 @@ mod tests {
         let provider = MockProviderBuilder::new("test")
             .mentions_project("myproject")
             .build();
-        
+
         let response = provider.query("what is myproject").await.unwrap();
         assert!(response.contains("myproject"));
         assert!(response.contains("recommend"));
