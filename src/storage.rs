@@ -162,10 +162,7 @@ impl Storage {
              LIMIT 1",
         )?;
         let mut rows = stmt.query_map(params![domain, before_ts], |row| {
-            Ok((
-                row.get::<_, i32>(0)?,
-                row.get::<_, i32>(1)?,
-            ))
+            Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?))
         })?;
         if let Some(row) = rows.next() {
             let (mentioned_sum, _) = row?;
@@ -230,10 +227,9 @@ impl Storage {
     }
 
     pub fn remove_project(&self, domain: &str) -> Result<bool> {
-        let n = self.conn.execute(
-            "DELETE FROM projects WHERE domain = ?1",
-            params![domain],
-        )?;
+        let n = self
+            .conn
+            .execute("DELETE FROM projects WHERE domain = ?1", params![domain])?;
         Ok(n > 0)
     }
 
@@ -248,9 +244,9 @@ impl Storage {
 
     /// Returns all distinct domains tracked in the database.
     pub fn list_domains(&self) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT domain FROM mentions ORDER BY domain",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT domain FROM mentions ORDER BY domain")?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
         let mut domains = Vec::new();
         for row in rows {
