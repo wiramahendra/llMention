@@ -65,10 +65,7 @@ fn parse_prompt_list(response: &str) -> Vec<String> {
     if let (Some(start), Some(end)) = (s.find('['), s.rfind(']')) {
         let json = &s[start..=end];
         if let Ok(list) = serde_json::from_str::<Vec<String>>(json) {
-            return list
-                .into_iter()
-                .filter(|p| p.len() >= 5)
-                .collect();
+            return list.into_iter().filter(|p| p.len() >= 5).collect();
         }
     }
 
