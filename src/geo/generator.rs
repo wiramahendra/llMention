@@ -24,7 +24,9 @@ pub async fn generate(
     providers: &[Arc<dyn LlmProvider>],
 ) -> Result<Vec<GenerateResult>> {
     let system = match &opts.system_prompt_override {
-        Some(tpl) => tpl.replace("{about}", &opts.about).replace("{niche}", &opts.niche),
+        Some(tpl) => tpl
+            .replace("{about}", &opts.about)
+            .replace("{niche}", &opts.niche),
         None => prompts::build_generate_system_prompt(&opts.about, &opts.niche),
     };
 
@@ -49,7 +51,10 @@ pub async fn generate(
                     let first = content.lines().next().unwrap_or("").trim();
                     eprintln!("  [{}] {}", model, first);
                 }
-                results.push(GenerateResult { model, content: content.trim().to_string() });
+                results.push(GenerateResult {
+                    model,
+                    content: content.trim().to_string(),
+                });
             }
             Ok((model, Err(e))) => {
                 eprintln!("  [{}] error: {}", model, e);
