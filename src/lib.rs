@@ -20,8 +20,8 @@ pub mod tui;
 pub mod types;
 
 // Re-export commonly used types
-pub use project_config::ProjectConfig;
 pub use audit_engine::{AuditEngine, AuditOptions, PromptInput};
 pub use audit_storage::AuditStorage;
-pub use prompt_discovery::{PromptDiscovery, DiscoveredPrompt};
 pub use content_generator::{ContentGenerator, GenerationReport};
+pub use project_config::ProjectConfig;
+pub use prompt_discovery::{DiscoveredPrompt, PromptDiscovery};
