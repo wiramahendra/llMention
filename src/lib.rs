@@ -1,10 +1,15 @@
 pub mod agent;
+pub mod audit_engine;
+pub mod audit_storage;
 pub mod cache;
 pub mod config;
+pub mod content_generator;
 pub mod geo;
 pub mod marketplace;
 pub mod parser;
 pub mod plugins;
+pub mod project_config;
+pub mod prompt_discovery;
 pub mod providers;
 pub mod report;
 pub mod scheduler;
@@ -12,3 +17,10 @@ pub mod storage;
 pub mod tracker;
 pub mod tui;
 pub mod types;
+
+// Re-export commonly used types
+pub use project_config::ProjectConfig;
+pub use audit_engine::{AuditEngine, AuditOptions, PromptInput};
+pub use audit_storage::AuditStorage;
+pub use prompt_discovery::{PromptDiscovery, DiscoveredPrompt};
+pub use content_generator::{ContentGenerator, GenerationReport};
