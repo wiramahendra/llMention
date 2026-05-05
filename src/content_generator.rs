@@ -1,8 +1,7 @@
-use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::{
-    audit_storage::{AuditResult, AuditStorage, AuditSummary, GeneratedAsset},
+    audit_storage::AuditResult,
     project_config::ProjectConfig,
 };
 
