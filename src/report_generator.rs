@@ -3,7 +3,7 @@ use chrono::Utc;
 use std::path::PathBuf;
 
 use crate::{
-    audit_storage::{AuditResult, AuditRun, AuditStorage, AuditSummary, Citation, CompetitorMention},
+    audit_storage::{AuditResult, AuditRun, AuditStorage, AuditSummary},
     project_config::ProjectConfig,
 };
 
@@ -67,7 +67,7 @@ impl ReportGenerator {
         Ok(report)
     }
 
-    fn generate_header(&self, run: &AuditRun, summary: &AuditSummary) -> String {
+    fn generate_header(&self, run: &AuditRun, _summary: &AuditSummary) -> String {
         format!(r#"# LLMention Evidence Report
 
 ## {project_name}
