@@ -114,6 +114,42 @@ llmention optimize myproject.com --niche "Rust CLI tool" --auto-apply  # 5. impr
 
 ---
 
+## New: Evidence-First Workflow (v0.2+)
+
+LLMention v0.2 introduces an **evidence-first approach** with project-level configuration, multi-sample audits, and comprehensive reporting:
+
+```bash
+# Initialize a project with llmention.toml
+llmention init2 --name "MyProject" --website "https://example.com"
+
+# Discover prompts based on your project config
+llmention prompts2 discover
+
+# Run evidence-based audit with multiple samples
+llmention audit2 run --models mock --samples 3
+
+# Generate markdown report
+llmention report2 --output ./reports/
+
+# Generate content from audit gaps
+llmention generate2 --output ./generated/
+
+# Compare two audit runs
+llmention compare --before 1 --after 2
+```
+
+**Key features:**
+- **Project config** (`llmention.toml`) — Define project once, audit repeatedly
+- **Multi-sample audits** — Statistical significance with multiple samples per prompt
+- **Raw evidence storage** — All responses stored locally for transparency
+- **Prompt categorization** — Intent-aware prompts (buyer intent, comparison, etc.)
+- **Content gap analysis** — Identify where competitors are mentioned but you're not
+- **Before/after comparison** — Track visibility improvements over time
+
+See [docs/v0.2-evidence-engine-guide.md](docs/v0.2-evidence-engine-guide.md) for the complete guide.
+
+---
+
 ## Commands
 
 ### `optimize` — Full GEO agent
