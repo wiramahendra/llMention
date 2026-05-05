@@ -945,77 +945,7 @@ async fn main() -> Result<()> {
 
                 let primary_content = &results[0].content;
                 let delta = evaluator::evaluate_content(&prompt, primary_content, &providers).await?;
-                report::print_eval_delta(&delta, before_stored);
-            }
-        }
-
-            let about_str = about.as_deref().unwrap_or("").to_string();
-            let niche_str = niche.as_deref().unwrap_or("general").to_string();
-            let system_prompt_override = resolve_generate_template(plugin.as_deref(), &base_dir);
-
-            println!(
-                "\n  {} {}\n  {} {}{}\n",
-                "Generating content for:".bold(),
-                format!("\"{}\"", prompt).cyan(),
-                "Using models:".dimmed(),
-                providers.iter().map(|p| p.name()).collect::<Vec<_>>().join(", ").cyan(),
-                plugin.as_deref().map(|p| format!("  [plugin: {}]", p).yellow().to_string()).unwrap_or_default()
-            );
-
-            let opts = GenerateOptions {
-                prompt: prompt.clone(),
-                about: about_str.clone(),
-                niche: niche_str,
-                verbose: cli.verbose,
-                system_prompt_override,
-            };
-
-            let results = generator::generate(&opts, &providers).await?;
-
-            if results.is_empty() {
-                bail!("No providers returned a response. Check your config or try --models.");
-            }
-
-            match &output {
-                Some(path) => {
-                    let primary = &results[0];
-                    std::fs::write(path, &primary.content)?;
-                    println!(
-                        "  {} Saved to {}\n",
-                        "✓".green().bold(),
-                        path.display().to_string().cyan()
-                    );
-                    println!(
-                        "  {}  git add {} && git commit -m \"docs: add GEO content for '{}'\"",
-                        "Tip".yellow().bold(),
-                        path.display(),
-                        prompt
-                    );
-                    println!();
-                }
-                None => {
-                    report::print_generate_results(&results, &prompt);
-                }
-            }
-
-            if evaluate {
-                println!("  {} Running before/after evaluation…\n", "→".cyan());
-
-                let domain_hint = extract_domain_hint(&about_str);
-                let before_stored = domain_hint.as_deref().and_then(|d| {
-                    storage.query_domain(d, 7).ok().and_then(|results| {
-                        if results.is_empty() {
-                            None
-                        } else {
-                            let mentioned = results.iter().filter(|r| r.mentioned).count();
-                            Some(mentioned as f64 / results.len() as f64 * 100.0)
-                        }
-                    })
-                });
-
-                let primary_content = &results[0].content;
-                let delta = evaluator::evaluate_content(&prompt, primary_content, &providers).await?;
-                report::print_eval_delta(&delta, before_stored);
+            report::print_eval_delta(&delta, before_stored);
             }
         }
 
