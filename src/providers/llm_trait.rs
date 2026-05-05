@@ -11,9 +11,5 @@ pub trait LlmProvider: Send + Sync {
         self.query_with_system(None, prompt).await
     }
 
-    async fn query_with_system(
-        &self,
-        system: Option<&str>,
-        prompt: &str,
-    ) -> Result<String>;
+    async fn query_with_system(&self, system: Option<&str>, prompt: &str) -> Result<String>;
 }
