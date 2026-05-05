@@ -251,7 +251,7 @@ impl AuditStorage {
         let mut stmt = self.conn.prepare(
             "SELECT id, project_id, started_at, completed_at, status, 
                     provider_models_json, samples_per_prompt, temperature, summary_json
-             FROM audit_runs WHERE id = ?1"
+             FROM audit_runs WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![run_id], Self::map_audit_run)?;
         Ok(rows.next().transpose()?)
@@ -264,7 +264,7 @@ impl AuditStorage {
              FROM audit_runs 
              WHERE project_id = ?1
              ORDER BY started_at DESC
-             LIMIT ?2"
+             LIMIT ?2",
         )?;
         let rows = stmt.query_map(params![project_id, limit as i64], Self::map_audit_run)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -297,7 +297,7 @@ impl AuditStorage {
                     expected_entity, created_by, created_at
              FROM prompts 
              WHERE project_id = ?1
-             ORDER BY priority ASC NULLS LAST, created_at DESC"
+             ORDER BY priority ASC NULLS LAST, created_at DESC",
         )?;
         let rows = stmt.query_map(params![project_id], Self::map_prompt)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -307,7 +307,7 @@ impl AuditStorage {
         let mut stmt = self.conn.prepare(
             "SELECT id, project_id, prompt_text, intent, funnel_stage, priority, 
                     expected_entity, created_by, created_at
-             FROM prompts WHERE id = ?1"
+             FROM prompts WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![prompt_id], Self::map_prompt)?;
         Ok(rows.next().transpose()?)
@@ -330,7 +330,8 @@ impl AuditStorage {
 
         let count = duplicates.len();
         for id in duplicates {
-            self.conn.execute("DELETE FROM prompts WHERE id = ?1", params![id])?;
+            self.conn
+                .execute("DELETE FROM prompts WHERE id = ?1", params![id])?;
         }
         Ok(count)
     }
@@ -376,7 +377,7 @@ impl AuditStorage {
                     mention_position, sentiment, created_at
              FROM audit_results 
              WHERE audit_run_id = ?1
-             ORDER BY id ASC"
+             ORDER BY id ASC",
         )?;
         let rows = stmt.query_map(params![run_id], Self::map_audit_result)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -404,7 +405,7 @@ impl AuditStorage {
     pub fn get_citations_for_result(&self, result_id: i64) -> Result<Vec<Citation>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, audit_result_id, url, domain, is_project_domain, created_at
-             FROM citations WHERE audit_result_id = ?1"
+             FROM citations WHERE audit_result_id = ?1",
         )?;
         let rows = stmt.query_map(params![result_id], Self::map_citation)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -434,10 +435,13 @@ impl AuditStorage {
         Ok(self.conn.last_insert_rowid())
     }
 
-    pub fn get_competitor_mentions_for_result(&self, result_id: i64) -> Result<Vec<CompetitorMention>> {
+    pub fn get_competitor_mentions_for_result(
+        &self,
+        result_id: i64,
+    ) -> Result<Vec<CompetitorMention>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, audit_result_id, competitor_name, mention_position, sentiment, created_at
-             FROM competitor_mentions WHERE audit_result_id = ?1"
+             FROM competitor_mentions WHERE audit_result_id = ?1",
         )?;
         let rows = stmt.query_map(params![result_id], Self::map_competitor_mention)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -478,16 +482,22 @@ impl AuditStorage {
 
     pub fn get_audit_summary(&self, run_id: i64) -> Result<AuditSummary> {
         let results = self.get_audit_results(run_id)?;
-        
+
         let total = results.len();
         let mentioned = results.iter().filter(|r| r.mentioned_project).count();
         let recommended = results.iter().filter(|r| r.recommended_project).count();
-        let cited: usize = results.iter()
-            .map(|r| self.get_citations_for_result(r.id).map(|c| c.len()).unwrap_or(0))
+        let cited: usize = results
+            .iter()
+            .map(|r| {
+                self.get_citations_for_result(r.id)
+                    .map(|c| c.len())
+                    .unwrap_or(0)
+            })
             .sum();
 
         // Get unique models
-        let mut models: Vec<String> = results.iter()
+        let mut models: Vec<String> = results
+            .iter()
             .map(|r| format!("{}:{}", r.provider, r.model))
             .collect();
         models.sort();
@@ -498,9 +508,21 @@ impl AuditStorage {
             mention_count: mentioned,
             recommendation_count: recommended,
             citation_count: cited,
-            mention_rate: if total > 0 { mentioned as f64 / total as f64 } else { 0.0 },
-            recommendation_rate: if total > 0 { recommended as f64 / total as f64 } else { 0.0 },
-            citation_rate: if total > 0 { cited as f64 / total as f64 } else { 0.0 },
+            mention_rate: if total > 0 {
+                mentioned as f64 / total as f64
+            } else {
+                0.0
+            },
+            recommendation_rate: if total > 0 {
+                recommended as f64 / total as f64
+            } else {
+                0.0
+            },
+            citation_rate: if total > 0 {
+                cited as f64 / total as f64
+            } else {
+                0.0
+            },
             models_used: models,
         })
     }
@@ -571,7 +593,9 @@ impl AuditStorage {
         })
     }
 
-    fn map_competitor_mention(row: &Row) -> std::result::Result<CompetitorMention, rusqlite::Error> {
+    fn map_competitor_mention(
+        row: &Row,
+    ) -> std::result::Result<CompetitorMention, rusqlite::Error> {
         Ok(CompetitorMention {
             id: row.get(0)?,
             audit_result_id: row.get(1)?,
@@ -658,7 +682,7 @@ impl AuditSummary {
         let mention_score = self.mention_rate * 100.0;
         let recommendation_score = self.recommendation_rate * 100.0;
         let citation_score = self.citation_rate * 100.0;
-        
+
         // Position and sentiment would need per-result data, use placeholders
         let position_score = if self.mention_rate > 0.0 { 50.0 } else { 0.0 };
         let sentiment_score = if self.mention_rate > 0.0 { 70.0 } else { 0.0 };
@@ -681,17 +705,14 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("test.db");
         let storage = AuditStorage::open(&db_path).unwrap();
-        
+
         // Create an audit run
-        let run_id = storage.create_audit_run(
-            "test-project",
-            &["ollama:llama3.2".to_string()],
-            3,
-            0.2,
-        ).unwrap();
-        
+        let run_id = storage
+            .create_audit_run("test-project", &["ollama:llama3.2".to_string()], 3, 0.2)
+            .unwrap();
+
         assert!(run_id > 0);
-        
+
         let run = storage.get_audit_run(run_id).unwrap().unwrap();
         assert_eq!(run.project_id, "test-project");
         assert_eq!(run.status, "running");
@@ -702,7 +723,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("test.db");
         let storage = AuditStorage::open(&db_path).unwrap();
-        
+
         // Insert duplicate prompts
         let prompt1 = NewPrompt {
             text: "What is the best tool?",
@@ -712,7 +733,7 @@ mod tests {
             expected_entity: Some("tool"),
             created_by: Some("test"),
         };
-        
+
         let prompt2 = NewPrompt {
             text: "what   is the best tool?", // normalized should match
             intent: Some("discovery"),
@@ -721,13 +742,13 @@ mod tests {
             expected_entity: Some("tool"),
             created_by: Some("test"),
         };
-        
+
         storage.insert_prompt("test-project", &prompt1).unwrap();
         storage.insert_prompt("test-project", &prompt2).unwrap();
-        
+
         let deduped = storage.dedupe_prompts("test-project").unwrap();
         assert_eq!(deduped, 1);
-        
+
         let remaining = storage.list_prompts("test-project").unwrap();
         assert_eq!(remaining.len(), 1);
     }
