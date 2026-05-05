@@ -45,7 +45,10 @@ pub fn discover_plugins(config_dir: &PathBuf) -> Vec<Plugin> {
         let Ok(manifest) = toml::from_str::<PluginManifest>(&content) else {
             continue;
         };
-        plugins.push(Plugin { manifest, dir: path });
+        plugins.push(Plugin {
+            manifest,
+            dir: path,
+        });
     }
     plugins
 }
