@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use llmention::{
     agent::optimizer::{self, OptimizeOptions},
-    audit_engine::{AuditEngine, AuditOptions, PromptInput, build_providers_for_project},
+    audit_engine::{build_providers_for_project, AuditEngine, AuditOptions, PromptInput},
     audit_storage::{AuditStorage, NewGeneratedAsset, NewPrompt},
     cache::Cache,
     config::{Config, EXAMPLE_CONFIG},
@@ -668,7 +668,10 @@ async fn main() -> Result<()> {
                 "✅".green(),
                 path.display().to_string().cyan()
             );
-            println!("     or set {} to use Ollama for free.\n", "enabled = true".cyan());
+            println!(
+                "     or set {} to use Ollama for free.\n",
+                "enabled = true".cyan()
+            );
         }
     }
 
@@ -676,7 +679,11 @@ async fn main() -> Result<()> {
     let cache = Cache::new(&base_dir)?;
 
     match cli.command {
-        Commands::Track { domain, prompts, judge } => {
+        Commands::Track {
+            domain,
+            prompts,
+            judge,
+        } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
                 no_providers_error();
@@ -693,23 +700,37 @@ async fn main() -> Result<()> {
                 domain.cyan().bold(),
                 prompts.len(),
                 providers.len(),
-                if judge { "  [+judge]".dimmed().to_string() } else { String::new() }
+                if judge {
+                    "  [+judge]".dimmed().to_string()
+                } else {
+                    String::new()
+                }
             );
 
             let prev_rate = fetch_prev_rate(&storage, &domain);
             let summary = tracker::run_track(
-                &domain, prompts, providers, &storage, &cache,
+                &domain,
+                prompts,
+                providers,
+                &storage,
+                &cache,
                 TrackOptions {
                     verbose: cli.verbose,
                     concurrency: config.defaults.concurrency,
                     judge: judge_provider,
                     quiet: cli.quiet,
                 },
-            ).await?;
+            )
+            .await?;
             report::print_summary(&summary, prev_rate);
         }
 
-        Commands::AuditLegacy { domain, niche, competitor, judge } => {
+        Commands::AuditLegacy {
+            domain,
+            niche,
+            competitor,
+            judge,
+        } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
                 no_providers_error();
@@ -723,23 +744,36 @@ async fn main() -> Result<()> {
                 domain.cyan().bold(),
                 prompts.len(),
                 providers.len(),
-                if judge { "  [+judge]".dimmed().to_string() } else { String::new() }
+                if judge {
+                    "  [+judge]".dimmed().to_string()
+                } else {
+                    String::new()
+                }
             );
 
             let prev_rate = fetch_prev_rate(&storage, &domain);
             let summary = tracker::run_track(
-                &domain, prompts, providers, &storage, &cache,
+                &domain,
+                prompts,
+                providers,
+                &storage,
+                &cache,
                 TrackOptions {
                     verbose: cli.verbose,
                     concurrency: config.defaults.concurrency,
                     judge: judge_provider,
                     quiet: cli.quiet,
                 },
-            ).await?;
+            )
+            .await?;
             report::print_summary(&summary, prev_rate);
         }
 
-        Commands::ReportLegacy { domain, days, export } => {
+        Commands::ReportLegacy {
+            domain,
+            days,
+            export,
+        } => {
             let results = storage.query_domain(&domain, days)?;
             match export {
                 Some(ExportFormat::Csv) => print!("{}", report::export_csv(&results)),
@@ -750,7 +784,16 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Optimize { domain, niche, competitors, steps, max_rounds, dry_run, auto_apply, plugin } => {
+        Commands::Optimize {
+            domain,
+            niche,
+            competitors,
+            steps,
+            max_rounds,
+            dry_run,
+            auto_apply,
+            plugin,
+        } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
                 no_providers_error();
@@ -764,8 +807,10 @@ async fn main() -> Result<()> {
                 .map(|s| s.trim().to_string())
                 .collect();
 
-            let generate_template_override = resolve_generate_template(plugin.as_deref(), &base_dir);
-            let discover_template_override = resolve_discover_template(plugin.as_deref(), &base_dir);
+            let generate_template_override =
+                resolve_generate_template(plugin.as_deref(), &base_dir);
+            let discover_template_override =
+                resolve_discover_template(plugin.as_deref(), &base_dir);
 
             println!(
                 "\n  {}  {}\n  {}  {}\n  {}  {} steps{}{}\n",
@@ -775,8 +820,15 @@ async fn main() -> Result<()> {
                 niche.cyan(),
                 "Mode:".dimmed(),
                 steps,
-                if dry_run { "  [dry-run]".yellow().to_string() } else { String::new() },
-                plugin.as_deref().map(|p| format!("  [plugin: {}]", p).yellow().to_string()).unwrap_or_default()
+                if dry_run {
+                    "  [dry-run]".yellow().to_string()
+                } else {
+                    String::new()
+                },
+                plugin
+                    .as_deref()
+                    .map(|p| format!("  [plugin: {}]", p).yellow().to_string())
+                    .unwrap_or_default()
             );
 
             let opts = OptimizeOptions {
@@ -805,11 +857,7 @@ async fn main() -> Result<()> {
                         std::fs::create_dir_all(parent)?;
                     }
                     std::fs::write(path, &section.content)?;
-                    println!(
-                        "  {}  {}",
-                        "✓".green(),
-                        section.file_name.cyan()
-                    );
+                    println!("  {}  {}", "✓".green(), section.file_name.cyan());
                     written += 1;
                 }
                 println!(
@@ -833,7 +881,14 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::GenerateLegacy { prompt, about, niche, output, evaluate, plugin } => {
+        Commands::GenerateLegacy {
+            prompt,
+            about,
+            niche,
+            output,
+            evaluate,
+            plugin,
+        } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
                 no_providers_error();
@@ -848,8 +903,16 @@ async fn main() -> Result<()> {
                 "Generating content for:".bold(),
                 format!("\"{}\"", prompt).cyan(),
                 "Using models:".dimmed(),
-                providers.iter().map(|p| p.name()).collect::<Vec<_>>().join(", ").cyan(),
-                plugin.as_deref().map(|p| format!("  [plugin: {}]", p)).unwrap_or_default()
+                providers
+                    .iter()
+                    .map(|p| p.name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    .cyan(),
+                plugin
+                    .as_deref()
+                    .map(|p| format!("  [plugin: {}]", p))
+                    .unwrap_or_default()
             );
 
             let opts = GenerateOptions {
@@ -904,8 +967,9 @@ async fn main() -> Result<()> {
                 });
 
                 let primary_content = &results[0].content;
-                let delta = evaluator::evaluate_content(&prompt, primary_content, &providers).await?;
-            report::print_eval_delta(&delta, before_stored);
+                let delta =
+                    evaluator::evaluate_content(&prompt, primary_content, &providers).await?;
+                report::print_eval_delta(&delta, before_stored);
             }
         }
 
@@ -915,7 +979,11 @@ async fn main() -> Result<()> {
                     // list
                     run_projects_list(&storage)?;
                 }
-                Some(ProjectAction::Add { domain, niche, notes }) => {
+                Some(ProjectAction::Add {
+                    domain,
+                    niche,
+                    notes,
+                }) => {
                     storage.upsert_project(&domain, niche.as_deref(), notes.as_deref())?;
                     println!(
                         "\n  {}  {} saved to projects\n",
@@ -927,20 +995,27 @@ async fn main() -> Result<()> {
                     if storage.remove_project(&domain)? {
                         println!("\n  {}  {} removed\n", "✓".green().bold(), domain.cyan());
                     } else {
-                        println!("\n  {}  {} not found in projects\n", "!".yellow(), domain.cyan());
+                        println!(
+                            "\n  {}  {} not found in projects\n",
+                            "!".yellow(),
+                            domain.cyan()
+                        );
                     }
                 }
                 _ => run_projects_list(&storage)?,
             }
         }
 
-        Commands::Watch { domain, niche, interval } => {
+        Commands::Watch {
+            domain,
+            niche,
+            interval,
+        } => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
             if providers.is_empty() {
                 no_providers_error();
             }
-            let audit_prompts =
-                prompts::default_prompts(&domain, niche.as_deref(), None);
+            let audit_prompts = prompts::default_prompts(&domain, niche.as_deref(), None);
 
             if !cli.quiet {
                 println!(
@@ -974,8 +1049,12 @@ async fn main() -> Result<()> {
                         let rate = summary.mention_rate();
                         let ts = chrono::Utc::now().format("%Y-%m-%d %H:%M UTC");
                         let trend = match prev_rate {
-                            Some(p) if rate - p > 2.0 => format!(" ↑{:.0}pp", rate - p).green().to_string(),
-                            Some(p) if p - rate > 2.0 => format!(" ↓{:.0}pp", p - rate).red().to_string(),
+                            Some(p) if rate - p > 2.0 => {
+                                format!(" ↑{:.0}pp", rate - p).green().to_string()
+                            }
+                            Some(p) if p - rate > 2.0 => {
+                                format!(" ↓{:.0}pp", p - rate).red().to_string()
+                            }
                             Some(_) => " →".dimmed().to_string(),
                             None => String::new(),
                         };
@@ -1024,7 +1103,11 @@ async fn main() -> Result<()> {
             match action {
                 None | Some(PluginAction::List) => {
                     println!();
-                    println!("  {}  {} installed", "Plugins".bold(), installed.len().to_string().cyan());
+                    println!(
+                        "  {}  {} installed",
+                        "Plugins".bold(),
+                        installed.len().to_string().cyan()
+                    );
                     println!("{}", "─".repeat(64).dimmed());
                     if installed.is_empty() {
                         println!(
@@ -1060,13 +1143,19 @@ async fn main() -> Result<()> {
                 }
                 Some(PluginAction::Enable { name }) => {
                     if plugins::find_plugin(&base_dir, &name).is_some() {
-                        println!("\n  {}  Plugin {} is installed and ready.\n  Use {} to apply it.\n",
-                            "✓".green().bold(), name.cyan(),
-                            format!("--plugin {}", name).cyan());
+                        println!(
+                            "\n  {}  Plugin {} is installed and ready.\n  Use {} to apply it.\n",
+                            "✓".green().bold(),
+                            name.cyan(),
+                            format!("--plugin {}", name).cyan()
+                        );
                     } else {
-                        println!("\n  {}  Plugin {} is not installed. Run:\n  {}\n",
-                            "!".yellow(), name.cyan(),
-                            format!("llmention prompts install {}", name).cyan());
+                        println!(
+                            "\n  {}  Plugin {} is not installed. Run:\n  {}\n",
+                            "!".yellow(),
+                            name.cyan(),
+                            format!("llmention prompts install {}", name).cyan()
+                        );
                     }
                 }
                 Some(PluginAction::Disable { name }) => {
@@ -1076,44 +1165,58 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Share { domain, days, format } => {
+        Commands::Share {
+            domain,
+            days,
+            format,
+        } => {
             let results = storage.query_domain(&domain, days)?;
             if results.is_empty() {
-                println!("\n  {}  No data for {}. Run {} first.\n",
+                println!(
+                    "\n  {}  No data for {}. Run {} first.\n",
                     "!".yellow(),
                     domain.cyan(),
-                    format!("llmention audit {}", domain).cyan());
+                    format!("llmention audit {}", domain).cyan()
+                );
             } else {
                 match format {
-                    ShareFormat::Json => print!("{}", report::render_share_json(&domain, &results, days)),
-                    ShareFormat::Markdown => print!("{}", report::render_share_markdown(&domain, &results, days)),
+                    ShareFormat::Json => {
+                        print!("{}", report::render_share_json(&domain, &results, days))
+                    }
+                    ShareFormat::Markdown => {
+                        print!("{}", report::render_share_markdown(&domain, &results, days))
+                    }
                 }
             }
         }
 
-        Commands::Stats { domain, days } => {
-            match domain {
-                None => {
-                    let domains = storage.list_domains()?;
-                    println!();
-                    println!("  {}  {} domain(s) tracked", "Stats".bold(), domains.len().to_string().cyan());
-                    println!("{}", "─".repeat(64).dimmed());
-                    if domains.is_empty() {
-                        println!("\n  No data yet. Run {} to start tracking.\n",
-                            "llmention audit <domain>".cyan());
-                    } else {
-                        for d in &domains {
-                            println!("  {}  {}", "·".dimmed(), d.cyan());
-                        }
-                        println!("\n  {}  llmention stats <domain>\n", "→".cyan());
+        Commands::Stats { domain, days } => match domain {
+            None => {
+                let domains = storage.list_domains()?;
+                println!();
+                println!(
+                    "  {}  {} domain(s) tracked",
+                    "Stats".bold(),
+                    domains.len().to_string().cyan()
+                );
+                println!("{}", "─".repeat(64).dimmed());
+                if domains.is_empty() {
+                    println!(
+                        "\n  No data yet. Run {} to start tracking.\n",
+                        "llmention audit <domain>".cyan()
+                    );
+                } else {
+                    for d in &domains {
+                        println!("  {}  {}", "·".dimmed(), d.cyan());
                     }
-                }
-                Some(domain) => {
-                    let stats = storage.domain_stats(&domain, days)?;
-                    report::print_stats(&domain, &stats, days);
+                    println!("\n  {}  llmention stats <domain>\n", "→".cyan());
                 }
             }
-        }
+            Some(domain) => {
+                let stats = storage.domain_stats(&domain, days)?;
+                report::print_stats(&domain, &stats, days);
+            }
+        },
 
         Commands::Chat => {
             let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
@@ -1127,15 +1230,22 @@ async fn main() -> Result<()> {
             print!("{}", generate_docs());
         }
 
-        Commands::Schedule { domain, niche, interval, uninstall } => {
+        Commands::Schedule {
+            domain,
+            niche,
+            interval,
+            uninstall,
+        } => {
             let parsed_interval = match interval.as_str() {
                 "daily" => scheduler::ScheduleInterval::Daily,
                 "weekly" => scheduler::ScheduleInterval::Weekly,
-                h => match h.parse::<u32>() {
-                    Ok(n) if n > 0 => scheduler::ScheduleInterval::Custom(n),
-                    _ => {
-                        eprintln!("  {} Unknown interval '{}'. Use daily, weekly, or a number of hours.", "Error:".red().bold(), h);
-                        std::process::exit(1);
+                h => {
+                    match h.parse::<u32>() {
+                        Ok(n) if n > 0 => scheduler::ScheduleInterval::Custom(n),
+                        _ => {
+                            eprintln!("  {} Unknown interval '{}'. Use daily, weekly, or a number of hours.", "Error:".red().bold(), h);
+                            std::process::exit(1);
+                        }
                     }
                 }
             };
@@ -1158,39 +1268,87 @@ async fn main() -> Result<()> {
                             .args(["unload", &plist_path.display().to_string()])
                             .output();
                         std::fs::remove_file(&plist_path)?;
-                        println!("\n  {}  Scheduled audit for {} removed.\n", "✓".green().bold(), domain.cyan());
+                        println!(
+                            "\n  {}  Scheduled audit for {} removed.\n",
+                            "✓".green().bold(),
+                            domain.cyan()
+                        );
                     } else {
-                        println!("\n  {}  No scheduled job found for {}.\n", "!".yellow(), domain.cyan());
+                        println!(
+                            "\n  {}  No scheduled job found for {}.\n",
+                            "!".yellow(),
+                            domain.cyan()
+                        );
                     }
                 } else {
-                    let path = scheduler::install_launchd(&domain, niche.as_deref(), parsed_interval, &binary_path)?;
+                    let path = scheduler::install_launchd(
+                        &domain,
+                        niche.as_deref(),
+                        parsed_interval,
+                        &binary_path,
+                    )?;
                     let _ = std::process::Command::new("launchctl")
                         .args(["load", &path.display().to_string()])
                         .output();
                     println!();
-                    println!("  {}  Scheduled {} audit for {}", "✓".green().bold(), parsed_interval.label().cyan(), domain.cyan());
-                    println!("  {}  Plist: {}", "→".cyan(), path.display().to_string().dimmed());
-                    println!("  {}  Logs:  {}", "→".cyan(), format!("/tmp/llmention-{}.log", domain.replace('.', "_")).dimmed());
+                    println!(
+                        "  {}  Scheduled {} audit for {}",
+                        "✓".green().bold(),
+                        parsed_interval.label().cyan(),
+                        domain.cyan()
+                    );
+                    println!(
+                        "  {}  Plist: {}",
+                        "→".cyan(),
+                        path.display().to_string().dimmed()
+                    );
+                    println!(
+                        "  {}  Logs:  {}",
+                        "→".cyan(),
+                        format!("/tmp/llmention-{}.log", domain.replace('.', "_")).dimmed()
+                    );
                     println!();
-                    println!("  {}  macOS will notify you if the mention rate drops >5pp.", "Tip".yellow().bold());
-                    println!("  {}  To remove: {}\n", "→".cyan(), format!("llmention schedule {} --uninstall", domain).cyan());
+                    println!(
+                        "  {}  macOS will notify you if the mention rate drops >5pp.",
+                        "Tip".yellow().bold()
+                    );
+                    println!(
+                        "  {}  To remove: {}\n",
+                        "→".cyan(),
+                        format!("llmention schedule {} --uninstall", domain).cyan()
+                    );
                 }
             }
 
             #[cfg(not(target_os = "macos"))]
             {
                 if uninstall {
-                    println!("\n  {}  On Linux, remove the cron entry manually with {}\n", "→".cyan(), "crontab -e".cyan());
+                    println!(
+                        "\n  {}  On Linux, remove the cron entry manually with {}\n",
+                        "→".cyan(),
+                        "crontab -e".cyan()
+                    );
                 } else {
-                    let line = scheduler::cron_line(&domain, niche.as_deref(), parsed_interval, &binary_path);
+                    let line = scheduler::cron_line(
+                        &domain,
+                        niche.as_deref(),
+                        parsed_interval,
+                        &binary_path,
+                    );
                     println!();
-                    println!("  {}  Add this line to your crontab ({}):", "→".cyan(), "crontab -e".cyan());
+                    println!(
+                        "  {}  Add this line to your crontab ({}):",
+                        "→".cyan(),
+                        "crontab -e".cyan()
+                    );
                     println!();
                     println!("  {}", line.cyan());
                     println!();
-                    println!("  {}  Logs will be appended to {}\n",
+                    println!(
+                        "  {}  Logs will be appended to {}\n",
                         "→".cyan(),
-                        format!("/tmp/llmention-{}.log", domain.replace('.', "_")).dimmed());
+                        format!("/tmp/llmention-{}.log", domain.replace('.', "_")).dimmed()
+                    );
                 }
                 let _ = parsed_interval;
             }
@@ -1206,7 +1364,13 @@ async fn main() -> Result<()> {
                     format!("llmention audit {}", domain).cyan()
                 );
             } else {
-                storage.record_publish_snapshot(&domain, note.as_deref(), rate, mentioned, total)?;
+                storage.record_publish_snapshot(
+                    &domain,
+                    note.as_deref(),
+                    rate,
+                    mentioned,
+                    total,
+                )?;
                 println!();
                 println!(
                     "  {}  Publish checkpoint recorded for {}",
@@ -1263,8 +1427,13 @@ async fn main() -> Result<()> {
         Commands::Quickstart => run_quickstart()?,
 
         // ── Evidence-First Workflow (Primary Commands) ───────────────────────────
-
-        Commands::Init { name, website, category, yes, force } => {
+        Commands::Init {
+            name,
+            website,
+            category,
+            yes,
+            force,
+        } => {
             run_init2(name, website, category, yes, force)?;
         }
 
@@ -1273,7 +1442,8 @@ async fn main() -> Result<()> {
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                    println!(
+                        "\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
                         "llmention init".cyan()
                     );
@@ -1307,7 +1477,8 @@ async fn main() -> Result<()> {
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                    println!(
+                        "\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
                         "llmention init".cyan()
                     );
@@ -1324,8 +1495,22 @@ async fn main() -> Result<()> {
             let storage = AuditStorage::open(&storage_path)?;
 
             match audit_cmd {
-                AuditCommand::Run { samples, temperature, models, json } => {
-                    run_audit_run(&project, &config, &storage, samples, temperature, models, json).await?;
+                AuditCommand::Run {
+                    samples,
+                    temperature,
+                    models,
+                    json,
+                } => {
+                    run_audit_run(
+                        &project,
+                        &config,
+                        &storage,
+                        samples,
+                        temperature,
+                        models,
+                        json,
+                    )
+                    .await?;
                 }
                 AuditCommand::List { limit } => {
                     run_audit_list(&project, &storage, limit)?;
@@ -1333,18 +1518,29 @@ async fn main() -> Result<()> {
                 AuditCommand::Show { id } => {
                     run_audit_show(&storage, id)?;
                 }
-                AuditCommand::Compare { before, after, format } => {
+                AuditCommand::Compare {
+                    before,
+                    after,
+                    format,
+                } => {
                     run_compare(&storage, before, after, &format).await?;
                 }
             }
         }
 
-        Commands::Report { run, format, output, full, force } => {
+        Commands::Report {
+            run,
+            format,
+            output,
+            full,
+            force,
+        } => {
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                    println!(
+                        "\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
                         "llmention init".cyan()
                     );
@@ -1363,12 +1559,17 @@ async fn main() -> Result<()> {
             run_report2(&project, &storage, run, &format, output, full, force).await?;
         }
 
-        Commands::Generate { from_audit, output, force } => {
+        Commands::Generate {
+            from_audit,
+            output,
+            force,
+        } => {
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                    println!(
+                        "\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
                         "llmention init".cyan()
                     );
@@ -1406,10 +1607,7 @@ fn print_welcome() {
 }
 
 fn no_providers_error() -> ! {
-    eprintln!(
-        "\n  {} No providers are enabled.\n",
-        "Error:".red().bold()
-    );
+    eprintln!("\n  {} No providers are enabled.\n", "Error:".red().bold());
     eprintln!("  Options:");
     eprintln!(
         "    • Add an API key in {}",
@@ -1448,7 +1646,12 @@ fn run_init() -> Result<()> {
         ($prompt:expr) => {{
             print!("  {}", $prompt);
             io::stdout().flush().ok();
-            lines.next().unwrap_or(Ok(String::new())).unwrap_or_default().trim().to_string()
+            lines
+                .next()
+                .unwrap_or(Ok(String::new()))
+                .unwrap_or_default()
+                .trim()
+                .to_string()
         }};
     }
 
@@ -1479,7 +1682,10 @@ fn run_init() -> Result<()> {
 
     // ── Gemini ───────────────────────────────────────────────────────────────
     println!();
-    println!("  {}  Google Gemini  (gemini-2.0-flash — includes AI Overviews context)", "③".cyan());
+    println!(
+        "  {}  Google Gemini  (gemini-2.0-flash — includes AI Overviews context)",
+        "③".cyan()
+    );
     let gemini_key = ask!("  API key (AIza...): ");
     let gemini_block = if !gemini_key.is_empty() {
         format!(
@@ -1492,11 +1698,18 @@ fn run_init() -> Result<()> {
 
     // ── Ollama ───────────────────────────────────────────────────────────────
     println!();
-    println!("  {}  Ollama  (local, free — requires ollama serve)", "④".cyan());
+    println!(
+        "  {}  Ollama  (local, free — requires ollama serve)",
+        "④".cyan()
+    );
     let use_ollama = ask!("  Enable Ollama? [y/N]: ");
     let ollama_model = if use_ollama.to_lowercase().starts_with('y') {
         let m = ask!("  Model name [llama3.2]: ");
-        if m.is_empty() { "llama3.2".to_string() } else { m }
+        if m.is_empty() {
+            "llama3.2".to_string()
+        } else {
+            m
+        }
     } else {
         String::new()
     };
@@ -1516,14 +1729,23 @@ fn run_init() -> Result<()> {
 
     if !any_configured {
         println!();
-        println!("  {}  No providers configured. Edit {} manually to add keys.", "!".yellow(), path.display().to_string().cyan());
+        println!(
+            "  {}  No providers configured. Edit {} manually to add keys.",
+            "!".yellow(),
+            path.display().to_string().cyan()
+        );
         println!();
         return Ok(());
     }
 
     // Build the config file
     let mut content = String::from("# LLMention configuration — ~/.llmention/config.toml\n\n");
-    for block in [&openai_block, &anthropic_block, &gemini_block, &ollama_block] {
+    for block in [
+        &openai_block,
+        &anthropic_block,
+        &gemini_block,
+        &ollama_block,
+    ] {
         if !block.is_empty() {
             content.push_str(block);
             content.push('\n');
@@ -1535,13 +1757,17 @@ fn run_init() -> Result<()> {
     std::fs::write(&path, &content)?;
 
     println!();
-    println!("  {}  Config written to {}", "✓".green().bold(), path.display().to_string().cyan());
+    println!(
+        "  {}  Config written to {}",
+        "✓".green().bold(),
+        path.display().to_string().cyan()
+    );
 
     // ── First domain ─────────────────────────────────────────────────────────
     println!();
     println!("  {}  What domain do you want to track first?", "⑤".cyan());
     let domain = ask!("  Domain (e.g. myproject.com): ");
-    let niche  = if !domain.is_empty() {
+    let niche = if !domain.is_empty() {
         ask!("  Niche (e.g. \"Rust CLI tool\"): ")
     } else {
         String::new()
@@ -1550,7 +1776,10 @@ fn run_init() -> Result<()> {
     println!();
     println!("{}", "━".repeat(56).dimmed());
     println!();
-    println!("  {}  Setup complete! Here's what to do next:", "✓".green().bold());
+    println!(
+        "  {}  Setup complete! Here's what to do next:",
+        "✓".green().bold()
+    );
     println!();
 
     if !domain.is_empty() {
@@ -1559,26 +1788,39 @@ fn run_init() -> Result<()> {
         } else {
             String::new()
         };
+        println!("  {}  Run your first audit:", "1.".bold());
         println!(
-            "  {}  Run your first audit:",
-            "1.".bold()
+            "      {}",
+            format!("llmention audit {}{}", domain, niche_flag).cyan()
         );
-        println!("      {}", format!("llmention audit {}{}", domain, niche_flag).cyan());
         println!();
-        println!("  {}  Run the optimizer (generates GEO content):", "2.".bold());
-        println!("      {}", format!("llmention optimize {}{} --auto-apply", domain, niche_flag).cyan());
+        println!(
+            "  {}  Run the optimizer (generates GEO content):",
+            "2.".bold()
+        );
+        println!(
+            "      {}",
+            format!("llmention optimize {}{} --auto-apply", domain, niche_flag).cyan()
+        );
 
         // Save as a project
         let storage = Storage::open(&dir)?;
         let _ = storage.upsert_project(
             &domain,
-            if niche.is_empty() { None } else { Some(niche.as_str()) },
+            if niche.is_empty() {
+                None
+            } else {
+                Some(niche.as_str())
+            },
             None,
         );
         println!();
         println!("  {}  Saved {} as a project.", "✓".green(), domain.cyan());
     } else {
-        println!("  {}  llmention audit <your-domain> --niche \"your niche\"", "→".cyan());
+        println!(
+            "  {}  llmention audit <your-domain> --niche \"your niche\"",
+            "→".cyan()
+        );
     }
 
     println!();
@@ -1619,10 +1861,19 @@ fn run_config_command() -> Result<()> {
     println!();
     println!("  {}", "Supported providers:".bold());
     println!("    {}  openai     — gpt-4o-mini, gpt-4o, …", "·".dimmed());
-    println!("    {}  anthropic  — claude-3-5-haiku, claude-3-5-sonnet, …", "·".dimmed());
-    println!("    {}  gemini     — gemini-2.0-flash, gemini-1.5-pro  (Google)", "·".dimmed());
+    println!(
+        "    {}  anthropic  — claude-3-5-haiku, claude-3-5-sonnet, …",
+        "·".dimmed()
+    );
+    println!(
+        "    {}  gemini     — gemini-2.0-flash, gemini-1.5-pro  (Google)",
+        "·".dimmed()
+    );
     println!("    {}  xai        — grok-2-latest  (x.ai)", "·".dimmed());
-    println!("    {}  perplexity — sonar, sonar-pro  (web-search grounded)", "·".dimmed());
+    println!(
+        "    {}  perplexity — sonar, sonar-pro  (web-search grounded)",
+        "·".dimmed()
+    );
     println!(
         "    {}  ollama     — llama3.2, mistral, phi4, …  (local, free)",
         "·".dimmed()
@@ -1650,9 +1901,21 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
 
     // ── Paths ──
     let config_path = llmention::config::config_path();
-    check("Config file  ", config_path.exists(), &config_path.display().to_string());
-    check("Cache dir    ", base_dir.join("cache").exists(), "~/.llmention/cache/");
-    check("Database     ", base_dir.join("mentions.db").exists(), "~/.llmention/mentions.db");
+    check(
+        "Config file  ",
+        config_path.exists(),
+        &config_path.display().to_string(),
+    );
+    check(
+        "Cache dir    ",
+        base_dir.join("cache").exists(),
+        "~/.llmention/cache/",
+    );
+    check(
+        "Database     ",
+        base_dir.join("mentions.db").exists(),
+        "~/.llmention/mentions.db",
+    );
 
     println!();
     println!("  {}", "Providers:".bold());
@@ -1663,7 +1926,12 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
     match &config.providers.openai {
         Some(c) if c.enabled => {
             any_enabled = true;
-            println!("  {}  openai    {} ({})", "✓".green(), "enabled".green(), c.model.dimmed());
+            println!(
+                "  {}  openai    {} ({})",
+                "✓".green(),
+                "enabled".green(),
+                c.model.dimmed()
+            );
         }
         Some(_) => println!("  {}  openai    disabled", "–".dimmed()),
         None => println!("  {}  openai    not configured", "–".dimmed()),
@@ -1673,7 +1941,12 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
     match &config.providers.anthropic {
         Some(c) if c.enabled => {
             any_enabled = true;
-            println!("  {}  anthropic {} ({})", "✓".green(), "enabled".green(), c.model.dimmed());
+            println!(
+                "  {}  anthropic {} ({})",
+                "✓".green(),
+                "enabled".green(),
+                c.model.dimmed()
+            );
         }
         Some(_) => println!("  {}  anthropic disabled", "–".dimmed()),
         None => println!("  {}  anthropic not configured", "–".dimmed()),
@@ -1683,7 +1956,12 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
     match &config.providers.perplexity {
         Some(c) if c.enabled => {
             any_enabled = true;
-            println!("  {}  perplexity {} ({})", "✓".green(), "enabled".green(), c.model.dimmed());
+            println!(
+                "  {}  perplexity {} ({})",
+                "✓".green(),
+                "enabled".green(),
+                c.model.dimmed()
+            );
         }
         Some(_) => println!("  {}  perplexity disabled", "–".dimmed()),
         None => println!("  {}  perplexity not configured", "–".dimmed()),
@@ -1693,7 +1971,12 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
     match &config.providers.gemini {
         Some(c) if c.enabled => {
             any_enabled = true;
-            println!("  {}  gemini    {} ({})", "✓".green(), "enabled".green(), c.model.dimmed());
+            println!(
+                "  {}  gemini    {} ({})",
+                "✓".green(),
+                "enabled".green(),
+                c.model.dimmed()
+            );
         }
         Some(_) => println!("  {}  gemini    disabled", "–".dimmed()),
         None => println!("  {}  gemini    not configured", "–".dimmed()),
@@ -1703,7 +1986,12 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
     match &config.providers.xai {
         Some(c) if c.enabled => {
             any_enabled = true;
-            println!("  {}  xai       {} ({})", "✓".green(), "enabled".green(), c.model.dimmed());
+            println!(
+                "  {}  xai       {} ({})",
+                "✓".green(),
+                "enabled".green(),
+                c.model.dimmed()
+            );
         }
         Some(_) => println!("  {}  xai       disabled", "–".dimmed()),
         None => println!("  {}  xai       not configured", "–".dimmed()),
@@ -1729,10 +2017,7 @@ async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
                     "enabled but unreachable".yellow(),
                     c.base_url.cyan()
                 );
-                println!(
-                    "       Start it with: {}",
-                    "ollama serve".cyan()
-                );
+                println!("       Start it with: {}", "ollama serve".cyan());
             }
         }
         Some(c) => {
@@ -1797,21 +2082,44 @@ fn run_quickstart() -> Result<()> {
     println!("  {}  {}", "1.".bold().to_string(), "Create config".bold());
     println!("      {}", "llmention config".cyan());
     println!();
-    println!("  {}  {}", "2.".bold().to_string(), "Add your API key (or enable Ollama for free)".bold());
+    println!(
+        "  {}  {}",
+        "2.".bold().to_string(),
+        "Add your API key (or enable Ollama for free)".bold()
+    );
     println!("      {}", "Edit ~/.llmention/config.toml".cyan());
     println!();
-    println!("  {}  {}", "3.".bold().to_string(), "Verify your setup".bold());
+    println!(
+        "  {}  {}",
+        "3.".bold().to_string(),
+        "Verify your setup".bold()
+    );
     println!("      {}", "llmention doctor".cyan());
     println!();
-    println!("  {}  {}", "4.".bold().to_string(), "Run your first audit".bold());
-    println!("      {}", "llmention audit myproject.com --niche \"your niche\"".cyan());
+    println!(
+        "  {}  {}",
+        "4.".bold().to_string(),
+        "Run your first audit".bold()
+    );
+    println!(
+        "      {}",
+        "llmention audit myproject.com --niche \"your niche\"".cyan()
+    );
     println!();
-    println!("  {}  {}", "5.".bold().to_string(), "Let the agent optimize (optional)".bold());
-    println!("      {}", "llmention optimize myproject.com --niche \"your niche\" --auto-apply".cyan());
+    println!(
+        "  {}  {}",
+        "5.".bold().to_string(),
+        "Let the agent optimize (optional)".bold()
+    );
+    println!(
+        "      {}",
+        "llmention optimize myproject.com --niche \"your niche\" --auto-apply".cyan()
+    );
     println!();
     println!("{}", "─".repeat(56).dimmed());
     println!();
-    println!("  {}  Need help? Run {} for full documentation.",
+    println!(
+        "  {}  Need help? Run {} for full documentation.",
         "Tip".yellow().bold(),
         "llmention docs".cyan()
     );
@@ -2016,8 +2324,11 @@ fn run_init2(
         // Interactive mode
         let stdin = io::stdin();
         let mut stdout = io::stdout();
-        
-        print!("  Project name [{}]: ", name.as_deref().unwrap_or("MyProject"));
+
+        print!(
+            "  Project name [{}]: ",
+            name.as_deref().unwrap_or("MyProject")
+        );
         stdout.flush()?;
         let mut input = String::new();
         stdin.read_line(&mut input)?;
@@ -2026,7 +2337,7 @@ fn run_init2(
         } else {
             input.trim().to_string()
         };
-        
+
         print!("  Website [{}]: ", website.as_deref().unwrap_or(""));
         stdout.flush()?;
         input.clear();
@@ -2036,8 +2347,11 @@ fn run_init2(
         } else {
             input.trim().to_string()
         };
-        
-        print!("  Category [{}]: ", category.as_deref().unwrap_or("developer tool"));
+
+        print!(
+            "  Category [{}]: ",
+            category.as_deref().unwrap_or("developer tool")
+        );
         stdout.flush()?;
         input.clear();
         stdin.read_line(&mut input)?;
@@ -2053,14 +2367,27 @@ fn run_init2(
 
     // Save
     let path = config.save_to_dir(&std::env::current_dir()?)?;
-    
+
     println!();
-    println!("  {} Created {}", "✓".green().bold(), path.display().to_string().cyan());
+    println!(
+        "  {} Created {}",
+        "✓".green().bold(),
+        path.display().to_string().cyan()
+    );
     println!();
     println!("  Next steps:");
-    println!("    1. Edit {} to customize your project", "llmention.toml".cyan());
-    println!("    2. Run {} to discover prompts", "llmention prompts discover".cyan());
-    println!("    3. Run {} to start auditing", "llmention audit run".cyan());
+    println!(
+        "    1. Edit {} to customize your project",
+        "llmention.toml".cyan()
+    );
+    println!(
+        "    2. Run {} to discover prompts",
+        "llmention prompts discover".cyan()
+    );
+    println!(
+        "    3. Run {} to start auditing",
+        "llmention audit run".cyan()
+    );
     println!();
 
     Ok(())
@@ -2072,30 +2399,35 @@ async fn run_prompts_discover(
     limit: Option<usize>,
 ) -> Result<()> {
     println!();
-    println!("  {} Discovering prompts for {}", 
-        "→".cyan(), 
+    println!(
+        "  {} Discovering prompts for {}",
+        "→".cyan(),
         project.project.name.cyan().bold()
     );
     println!();
 
     let discovered = PromptDiscovery::discover(project);
     let limit = limit.unwrap_or(50);
-    
+
     // Store prompts in database
     let mut stored = 0;
     for prompt in discovered.iter().take(limit) {
-        let _id = storage.insert_prompt(&project.domain(), &NewPrompt {
-            text: &prompt.text,
-            intent: Some(&prompt.intent),
-            funnel_stage: Some(&prompt.funnel_stage),
-            priority: Some(prompt.priority),
-            expected_entity: Some(&prompt.expected_entity),
-            created_by: Some("discover"),
-        })?;
+        let _id = storage.insert_prompt(
+            &project.domain(),
+            &NewPrompt {
+                text: &prompt.text,
+                intent: Some(&prompt.intent),
+                funnel_stage: Some(&prompt.funnel_stage),
+                priority: Some(prompt.priority),
+                expected_entity: Some(&prompt.expected_entity),
+                created_by: Some("discover"),
+            },
+        )?;
         stored += 1;
-        
+
         if stored <= 10 {
-            println!("  {} {} — {} ({})",
+            println!(
+                "  {} {} — {} ({})",
                 "·".dimmed(),
                 prompt.text.cyan(),
                 prompt.category.as_str().dimmed(),
@@ -2103,16 +2435,17 @@ async fn run_prompts_discover(
             );
         }
     }
-    
+
     if stored > 10 {
         println!("  {} ... and {} more", "·".dimmed(), stored - 10);
     }
 
     // Deduplicate
     let deduped = storage.dedupe_prompts(&project.domain())?;
-    
+
     println!();
-    println!("  {} Stored {} prompt(s) (removed {} duplicates)",
+    println!(
+        "  {} Stored {} prompt(s) (removed {} duplicates)",
         "✓".green().bold(),
         stored - deduped,
         deduped
@@ -2122,37 +2455,37 @@ async fn run_prompts_discover(
     Ok(())
 }
 
-fn run_prompts_list(
-    project: &ProjectConfig,
-    storage: &AuditStorage,
-) -> Result<()> {
+fn run_prompts_list(project: &ProjectConfig, storage: &AuditStorage) -> Result<()> {
     let prompts = storage.list_prompts(&project.domain())?;
-    
+
     if prompts.is_empty() {
-        println!("\n  No prompts found. Run {} first.\n",
+        println!(
+            "\n  No prompts found. Run {} first.\n",
             "llmention prompts discover".cyan()
         );
         return Ok(());
     }
-    
+
     println!();
-    println!("  {} prompt(s) for {}",
+    println!(
+        "  {} prompt(s) for {}",
         prompts.len().to_string().cyan(),
         project.project.name.cyan().bold()
     );
     println!();
-    
+
     for p in prompts.iter().take(20) {
         let intent = p.intent.as_deref().unwrap_or("-");
         let stage = p.funnel_stage.as_deref().unwrap_or("-");
-        println!("  {} {} — {} → {}",
+        println!(
+            "  {} {} — {} → {}",
             format!("#{}", p.id).dimmed(),
             p.prompt_text.cyan(),
             intent.dimmed(),
             stage.dimmed()
         );
     }
-    
+
     if prompts.len() > 20 {
         println!("  {} ... and {} more", "·".dimmed(), prompts.len() - 20);
     }
@@ -2171,8 +2504,11 @@ async fn run_prompts_templates(
     match template_cmd {
         PromptTemplatesCommand::List => {
             println!();
-            println!("  {}  {} available", "Community Templates".bold(),
-                registry::BUILTIN_TEMPLATES.len().to_string().cyan());
+            println!(
+                "  {}  {} available",
+                "Community Templates".bold(),
+                registry::BUILTIN_TEMPLATES.len().to_string().cyan()
+            );
             println!("{}", "─".repeat(64).dimmed());
             println!();
             let mut table = Table::new();
@@ -2198,8 +2534,12 @@ async fn run_prompts_templates(
         PromptTemplatesCommand::Search { query } => {
             let results = registry::search_templates(&query);
             println!();
-            println!("  {}  {} match(es) for \"{}\"",
-                "Search".bold(), results.len().to_string().cyan(), query);
+            println!(
+                "  {}  {} match(es) for \"{}\"",
+                "Search".bold(),
+                results.len().to_string().cyan(),
+                query
+            );
             println!("{}", "─".repeat(64).dimmed());
             if results.is_empty() {
                 println!("\n  No templates matched your query.\n");
@@ -2223,17 +2563,20 @@ async fn run_prompts_templates(
                 println!();
             }
         }
-        PromptTemplatesCommand::Install { name } => {
-            match registry::find_template(&name) {
-                None => {
-                    println!("\n  {}  Template {} not found. Run {} to see available templates.\n",
-                        "✗".red().bold(), name.cyan(), "llmention prompts templates list".cyan());
-                }
-                Some(info) => {
-                    let plugin_dir = base_dir.join("plugins").join(&name);
-                    std::fs::create_dir_all(&plugin_dir)?;
+        PromptTemplatesCommand::Install { name } => match registry::find_template(&name) {
+            None => {
+                println!(
+                    "\n  {}  Template {} not found. Run {} to see available templates.\n",
+                    "✗".red().bold(),
+                    name.cyan(),
+                    "llmention prompts templates list".cyan()
+                );
+            }
+            Some(info) => {
+                let plugin_dir = base_dir.join("plugins").join(&name);
+                std::fs::create_dir_all(&plugin_dir)?;
 
-                    let manifest = format!(
+                let manifest = format!(
                         "[meta]\nname = \"{}\"\nversion = \"1.0.0\"\ndescription = \"{}\"\nauthor = \"{}\"\ntags = [{}]\n\n[templates]\n{}{}\n",
                         info.name,
                         info.description,
@@ -2242,27 +2585,34 @@ async fn run_prompts_templates(
                         builtin::generate_template(&name).map(|_| "generate = \"generate.prompt.md\"\n").unwrap_or(""),
                         builtin::discover_template(&name).map(|_| "discover = \"discover.prompt.md\"\n").unwrap_or(""),
                     );
-                    std::fs::write(plugin_dir.join("plugin.toml"), &manifest)?;
+                std::fs::write(plugin_dir.join("plugin.toml"), &manifest)?;
 
-                    if let Some(gen_tpl) = builtin::generate_template(&name) {
-                        std::fs::write(plugin_dir.join("generate.prompt.md"), gen_tpl)?;
-                    }
-                    if let Some(disc_tpl) = builtin::discover_template(&name) {
-                        std::fs::write(plugin_dir.join("discover.prompt.md"), disc_tpl)?;
-                    }
-
-                    println!("\n  {}  Installed {} to {}\n",
-                        "✓".green().bold(),
-                        name.cyan(),
-                        plugin_dir.display().to_string().dimmed());
-                    println!("  {}  Edit templates at:", "Tip".yellow().bold());
-                    println!("     {}", plugin_dir.display().to_string().cyan());
-                    println!("\n  {}  Use it with:\n  {}\n",
-                        "→".cyan(),
-                        format!("llmention generate-legacy \"...\" --plugin {} --about \"...\"", name).cyan());
+                if let Some(gen_tpl) = builtin::generate_template(&name) {
+                    std::fs::write(plugin_dir.join("generate.prompt.md"), gen_tpl)?;
                 }
+                if let Some(disc_tpl) = builtin::discover_template(&name) {
+                    std::fs::write(plugin_dir.join("discover.prompt.md"), disc_tpl)?;
+                }
+
+                println!(
+                    "\n  {}  Installed {} to {}\n",
+                    "✓".green().bold(),
+                    name.cyan(),
+                    plugin_dir.display().to_string().dimmed()
+                );
+                println!("  {}  Edit templates at:", "Tip".yellow().bold());
+                println!("     {}", plugin_dir.display().to_string().cyan());
+                println!(
+                    "\n  {}  Use it with:\n  {}\n",
+                    "→".cyan(),
+                    format!(
+                        "llmention generate-legacy \"...\" --plugin {} --about \"...\"",
+                        name
+                    )
+                    .cyan()
+                );
             }
-        }
+        },
     }
     Ok(())
 }
@@ -2279,7 +2629,8 @@ async fn run_audit_run(
     // Get prompts
     let prompts = storage.list_prompts(&project.domain())?;
     if prompts.is_empty() {
-        println!("\n  {} No prompts found. Run {} first.\n",
+        println!(
+            "\n  {} No prompts found. Run {} first.\n",
             "!".yellow(),
             "llmention prompts discover".cyan()
         );
@@ -2292,16 +2643,13 @@ async fn run_audit_run(
         vec![std::sync::Arc::new(
             MockProviderBuilder::new("mock")
                 .with_default_response("This is a mock response for testing.")
-                .build()
-        ) as std::sync::Arc<dyn llmention::providers::LlmProvider>]
-    } else {
-        build_providers_for_project(
-            &project.providers,
-            global_config,
-            models.as_deref(),
+                .build(),
         )
+            as std::sync::Arc<dyn llmention::providers::LlmProvider>]
+    } else {
+        build_providers_for_project(&project.providers, global_config, models.as_deref())
     };
-    
+
     if providers.is_empty() {
         bail!("No providers configured. Check ~/.llmention/config.toml or use --models mock");
     }
@@ -2318,7 +2666,7 @@ async fn run_audit_run(
 
     // Create engine and run
     let engine = AuditEngine::new(providers, options);
-    
+
     let prompt_inputs: Vec<PromptInput> = prompts
         .into_iter()
         .map(|p| PromptInput {
@@ -2331,32 +2679,37 @@ async fn run_audit_run(
         })
         .collect();
 
-    let result = engine.run_audit(&project.domain(), &prompt_inputs, storage).await?;
+    let result = engine
+        .run_audit(&project.domain(), &prompt_inputs, storage)
+        .await?;
 
     // Output
     if json {
         println!("{}", serde_json::to_string_pretty(&result.summary)?);
     } else {
         println!();
-        println!("  {} Audit Run {}",
+        println!(
+            "  {} Audit Run {}",
             "✓".green().bold(),
             result.run_id.to_string().cyan()
         );
         println!();
-        println!("  Mention rate:          {:.1}%",
+        println!(
+            "  Mention rate:          {:.1}%",
             result.summary.mention_rate * 100.0
         );
-        println!("  Recommendation rate:   {:.1}%",
+        println!(
+            "  Recommendation rate:   {:.1}%",
             result.summary.recommendation_rate * 100.0
         );
-        println!("  Citation rate:         {:.1}%",
+        println!(
+            "  Citation rate:         {:.1}%",
             result.summary.citation_rate * 100.0
         );
-        println!("  Total queries:         {}",
-            result.summary.total_queries
-        );
+        println!("  Total queries:         {}", result.summary.total_queries);
         println!();
-        println!("  Next: {} to generate content",
+        println!(
+            "  Next: {} to generate content",
             "llmention generate2".cyan()
         );
         println!();
@@ -2365,39 +2718,40 @@ async fn run_audit_run(
     Ok(())
 }
 
-fn run_audit_list(
-    project: &ProjectConfig,
-    storage: &AuditStorage,
-    limit: usize,
-) -> Result<()> {
+fn run_audit_list(project: &ProjectConfig, storage: &AuditStorage, limit: usize) -> Result<()> {
     let runs = storage.list_audit_runs(&project.domain(), limit)?;
-    
+
     if runs.is_empty() {
-        println!("\n  No audit runs found. Run {} first.\n",
+        println!(
+            "\n  No audit runs found. Run {} first.\n",
             "llmention audit run".cyan()
         );
         return Ok(());
     }
-    
+
     println!();
-    println!("  {} audit run(s) for {}",
+    println!(
+        "  {} audit run(s) for {}",
         runs.len().to_string().cyan(),
         project.project.name.cyan().bold()
     );
     println!();
-    
+
     for r in &runs {
         let status_icon = match r.status.as_str() {
             "completed" => "✓".green(),
             "failed" => "✗".red(),
             _ => "○".yellow(),
         };
-        
-        let summary = r.summary_json.as_deref()
+
+        let summary = r
+            .summary_json
+            .as_deref()
             .and_then(|s| serde_json::from_str::<llmention::audit_storage::AuditSummary>(s).ok());
-        
+
         if let Some(s) = summary {
-            println!("  {} Run {} — {:.0}% mentioned — {}/{}/{} — {}",
+            println!(
+                "  {} Run {} — {:.0}% mentioned — {}/{}/{} — {}",
                 status_icon,
                 r.id.to_string().cyan(),
                 s.mention_rate * 100.0,
@@ -2407,7 +2761,8 @@ fn run_audit_list(
                 r.status.dimmed()
             );
         } else {
-            println!("  {} Run {} — {} — {}",
+            println!(
+                "  {} Run {} — {} — {}",
                 status_icon,
                 r.id.to_string().cyan(),
                 r.started_at.split('T').next().unwrap_or("-").dimmed(),
@@ -2420,17 +2775,18 @@ fn run_audit_list(
     Ok(())
 }
 
-fn run_audit_show(
-    storage: &AuditStorage,
-    id: i64,
-) -> Result<()> {
+fn run_audit_show(storage: &AuditStorage, id: i64) -> Result<()> {
     let run = storage.get_audit_run(id)?;
     let results = storage.get_audit_results(id)?;
-    
+
     match run {
         Some(r) => {
             println!();
-            println!("  {} Audit Run {}", "→".cyan(), r.id.to_string().cyan().bold());
+            println!(
+                "  {} Audit Run {}",
+                "→".cyan(),
+                r.id.to_string().cyan().bold()
+            );
             println!();
             println!("  Project:     {}", r.project_id.cyan());
             println!("  Started:     {}", r.started_at.dimmed());
@@ -2463,7 +2819,8 @@ async fn run_report2(
         Some(id) => id,
         None => {
             let runs = storage.list_audit_runs(&project.domain(), 1)?;
-            runs.first().map(|r| r.id)
+            runs.first()
+                .map(|r| r.id)
                 .ok_or_else(|| anyhow::anyhow!("No audit runs found"))?
         }
     };
@@ -2480,7 +2837,11 @@ async fn run_report2(
     let path = output.join(&filename);
 
     if path.exists() && !force {
-        println!("\n  {} Report {} already exists", "!".yellow(), path.display().to_string().dimmed());
+        println!(
+            "\n  {} Report {} already exists",
+            "!".yellow(),
+            path.display().to_string().dimmed()
+        );
         println!("  Use {} to overwrite\n", "--force".cyan());
         return Ok(());
     }
@@ -2488,7 +2849,11 @@ async fn run_report2(
     std::fs::write(&path, &report)?;
 
     println!();
-    println!("  {} Generated report: {}", "✓".green().bold(), path.display().to_string().cyan());
+    println!(
+        "  {} Generated report: {}",
+        "✓".green().bold(),
+        path.display().to_string().cyan()
+    );
     println!();
 
     Ok(())
@@ -2504,13 +2869,15 @@ fn run_generate2(
     // Get audit run
     let run_id = if from_audit == "latest" {
         let runs = storage.list_audit_runs(&project.domain(), 1)?;
-        runs.first().map(|r| r.id).ok_or_else(|| anyhow::anyhow!("No audit runs found"))?
+        runs.first()
+            .map(|r| r.id)
+            .ok_or_else(|| anyhow::anyhow!("No audit runs found"))?
     } else {
         from_audit.parse::<i64>()?
     };
 
     let results = storage.get_audit_results(run_id)?;
-    
+
     if results.is_empty() {
         bail!("No results found for audit run {}", run_id);
     }
@@ -2518,30 +2885,31 @@ fn run_generate2(
     // Identify gaps
     let generator = ContentGenerator::new(project.clone());
     let gaps = generator.identify_gaps(&results, &project.competitors.names);
-    
+
     // Generate assets
     let assets = generator.generate_assets(&gaps);
-    
+
     // Create output directory
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
     }
-    
+
     // Write assets
     let mut written = 0;
     for asset in &assets {
         let path = output_dir.join(&asset.filename);
-        
+
         if path.exists() && !force {
-            println!("  {} {} exists (use --force to overwrite)",
+            println!(
+                "  {} {} exists (use --force to overwrite)",
                 "!".yellow(),
                 path.display().to_string().dimmed()
             );
             continue;
         }
-        
+
         std::fs::write(&path, &asset.content)?;
-        
+
         // Store in database
         storage.insert_generated_asset(&NewGeneratedAsset {
             project_id: &project.domain(),
@@ -2551,38 +2919,38 @@ fn run_generate2(
             slug: &asset.slug,
             markdown_content: &asset.content,
         })?;
-        
+
         println!("  {} {}", "✓".green(), path.display().to_string().cyan());
         written += 1;
     }
-    
+
     println!();
-    println!("  Written {} file(s) to {}", written, output_dir.display().to_string().cyan());
+    println!(
+        "  Written {} file(s) to {}",
+        written,
+        output_dir.display().to_string().cyan()
+    );
     println!();
 
     Ok(())
 }
 
-async fn run_compare(
-    storage: &AuditStorage,
-    before: i64,
-    after: i64,
-    format: &str,
-) -> Result<()> {
+async fn run_compare(storage: &AuditStorage, before: i64, after: i64, format: &str) -> Result<()> {
     let before_run = storage.get_audit_run(before)?;
     let after_run = storage.get_audit_run(after)?;
-    
+
     if before_run.is_none() || after_run.is_none() {
         bail!("One or both audit runs not found");
     }
-    
+
     let before_summary = storage.get_audit_summary(before)?;
     let after_summary = storage.get_audit_summary(after)?;
-    
+
     let mention_delta = (after_summary.mention_rate - before_summary.mention_rate) * 100.0;
-    let rec_delta = (after_summary.recommendation_rate - before_summary.recommendation_rate) * 100.0;
+    let rec_delta =
+        (after_summary.recommendation_rate - before_summary.recommendation_rate) * 100.0;
     let cit_delta = (after_summary.citation_rate - before_summary.citation_rate) * 100.0;
-    
+
     if format == "json" {
         let comparison = serde_json::json!({
             "before_run": before,
@@ -2600,12 +2968,13 @@ async fn run_compare(
         println!();
         println!("  {} Audit Comparison", "→".cyan());
         println!();
-        println!("  Before: Run {}  →  After: Run {}",
+        println!(
+            "  Before: Run {}  →  After: Run {}",
             before.to_string().cyan(),
             after.to_string().cyan()
         );
         println!();
-        
+
         let format_delta = |d: f64| {
             if d > 0.0 {
                 format!("+{:.1}pp", d).green().to_string()
@@ -2615,18 +2984,21 @@ async fn run_compare(
                 "→ 0pp".dimmed().to_string()
             }
         };
-        
-        println!("  Mention rate:        {:.1}% → {:.1}%  {}",
+
+        println!(
+            "  Mention rate:        {:.1}% → {:.1}%  {}",
             before_summary.mention_rate * 100.0,
             after_summary.mention_rate * 100.0,
             format_delta(mention_delta)
         );
-        println!("  Recommendation:      {:.1}% → {:.1}%  {}",
+        println!(
+            "  Recommendation:      {:.1}% → {:.1}%  {}",
             before_summary.recommendation_rate * 100.0,
             after_summary.recommendation_rate * 100.0,
             format_delta(rec_delta)
         );
-        println!("  Citation rate:       {:.1}% → {:.1}%  {}",
+        println!(
+            "  Citation rate:       {:.1}% → {:.1}%  {}",
             before_summary.citation_rate * 100.0,
             after_summary.citation_rate * 100.0,
             format_delta(cit_delta)
@@ -2644,17 +3016,19 @@ fn generate_markdown_report(
     _full: bool,
 ) -> Result<String> {
     use chrono::Utc;
-    
-    let run = storage.get_audit_run(run_id)?
+
+    let run = storage
+        .get_audit_run(run_id)?
         .ok_or_else(|| anyhow::anyhow!("Audit run {} not found", run_id))?;
-    
+
     let results = storage.get_audit_results(run_id)?;
     let summary = storage.get_audit_summary(run_id)?;
 
     let mut report = String::new();
-    
+
     // Header
-    report.push_str(&format!(r#"# LLMention Evidence Report
+    report.push_str(&format!(
+        r#"# LLMention Evidence Report
 
 ## {}
 
@@ -2673,7 +3047,8 @@ fn generate_markdown_report(
 
     // Executive Summary
     let visibility_score = summary.visibility_score();
-    report.push_str(&format!(r#"## Executive Summary
+    report.push_str(&format!(
+        r#"## Executive Summary
 
 | Metric | Value |
 |--------|-------|
@@ -2701,20 +3076,33 @@ fn generate_markdown_report(
     report.push_str("| Model | Queries | Mentions | Rate |\n");
     report.push_str("|-------|---------|----------|------|\n");
 
-    let mut by_provider: std::collections::HashMap<String, Vec<&llmention::audit_storage::AuditResult>> = std::collections::HashMap::new();
+    let mut by_provider: std::collections::HashMap<
+        String,
+        Vec<&llmention::audit_storage::AuditResult>,
+    > = std::collections::HashMap::new();
     for r in &results {
         by_provider.entry(r.provider.clone()).or_default().push(r);
     }
 
     for (provider, provider_results) in by_provider {
         let total = provider_results.len();
-        let mentions = provider_results.iter().filter(|r| r.mentioned_project).count();
-        let rate = if total > 0 { mentions as f64 / total as f64 * 100.0 } else { 0.0 };
-        report.push_str(&format!("| {} | {} | {} | {:.1}% |\n", provider, total, mentions, rate));
+        let mentions = provider_results
+            .iter()
+            .filter(|r| r.mentioned_project)
+            .count();
+        let rate = if total > 0 {
+            mentions as f64 / total as f64 * 100.0
+        } else {
+            0.0
+        };
+        report.push_str(&format!(
+            "| {} | {} | {} | {:.1}% |\n",
+            provider, total, mentions, rate
+        ));
     }
 
     report.push('\n');
-    
+
     // Footer
     report.push_str(&format!(r#"---
 
@@ -2735,18 +3123,19 @@ _Generated by [LLMention](https://github.com/wiramahendra/llMention) — local-f
 
 async fn run_diagnose2(url: &str) -> Result<()> {
     use reqwest::Client;
-    
+
     println!();
     println!("  {} Diagnosing {}", "→".cyan(), url.cyan().bold());
     println!();
-    
+
     let client = Client::new();
-    
+
     // Check main URL
     let main_res = client.get(url).send().await;
     match main_res {
         Ok(r) if r.status().is_success() => {
-            println!("  {} Homepage reachable ({})", 
+            println!(
+                "  {} Homepage reachable ({})",
                 "✓".green(),
                 r.status().to_string().dimmed()
             );
@@ -2758,7 +3147,7 @@ async fn run_diagnose2(url: &str) -> Result<()> {
             println!("  {} Homepage unreachable: {}", "✗".red(), e);
         }
     }
-    
+
     // Check robots.txt
     let robots_url = format!("{}/robots.txt", url.trim_end_matches('/'));
     match client.get(&robots_url).send().await {
@@ -2769,7 +3158,7 @@ async fn run_diagnose2(url: &str) -> Result<()> {
             println!("  {} robots.txt not found (recommended)", "○".dimmed());
         }
     }
-    
+
     // Check sitemap.xml
     let sitemap_url = format!("{}/sitemap.xml", url.trim_end_matches('/'));
     match client.get(&sitemap_url).send().await {
@@ -2777,10 +3166,13 @@ async fn run_diagnose2(url: &str) -> Result<()> {
             println!("  {} sitemap.xml exists", "✓".green());
         }
         _ => {
-            println!("  {} sitemap.xml not found (recommended for SEO)", "○".dimmed());
+            println!(
+                "  {} sitemap.xml not found (recommended for SEO)",
+                "○".dimmed()
+            );
         }
     }
-    
+
     // Check for llms.txt
     let llms_url = format!("{}/llms.txt", url.trim_end_matches('/'));
     match client.get(&llms_url).send().await {
@@ -2788,12 +3180,13 @@ async fn run_diagnose2(url: &str) -> Result<()> {
             println!("  {} llms.txt exists", "✓".green());
         }
         _ => {
-            println!("  {} llms.txt not found (generate with: llmention generate2)", 
+            println!(
+                "  {} llms.txt not found (generate with: llmention generate2)",
                 "○".dimmed()
             );
         }
     }
-    
+
     println!();
     println!("  Note: This checks basic crawlability only.");
     println!("  AI visibility depends on content quality, training data, and model behavior.");
