@@ -1,7 +1,7 @@
 use crate::project_config::{ProjectConfig, ProjectInfo};
 
 /// Categories of prompts for different intent stages
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PromptCategory {
     /// Category-level queries (e.g., "best tools for X")
     Category,
