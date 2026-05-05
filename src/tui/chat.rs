@@ -34,13 +34,22 @@ struct Message {
 
 impl Message {
     fn bot(text: impl Into<String>) -> Self {
-        Self { kind: MessageKind::Bot, text: text.into() }
+        Self {
+            kind: MessageKind::Bot,
+            text: text.into(),
+        }
     }
     fn user(text: impl Into<String>) -> Self {
-        Self { kind: MessageKind::User, text: text.into() }
+        Self {
+            kind: MessageKind::User,
+            text: text.into(),
+        }
     }
     fn system(text: impl Into<String>) -> Self {
-        Self { kind: MessageKind::System, text: text.into() }
+        Self {
+            kind: MessageKind::System,
+            text: text.into(),
+        }
     }
 }
 
@@ -120,7 +129,10 @@ impl ChatApp {
                     domain: domain.clone(),
                     niche: niche.clone(),
                 };
-                self.push_bot(format!("Got it — {} / {}. What would you like to do?", domain, niche));
+                self.push_bot(format!(
+                    "Got it — {} / {}. What would you like to do?",
+                    domain, niche
+                ));
                 self.push_bot(
                     "  [1] audit    — Quick visibility scan\n  [2] optimize  — Full 5-step GEO agent\n  [3] generate  — Create citable content\n  [q] quit",
                 );
@@ -210,12 +222,7 @@ impl ChatApp {
         }
     }
 
-    fn launch_audit(
-        &mut self,
-        domain: String,
-        niche: String,
-        providers: &[Arc<dyn LlmProvider>],
-    ) {
+    fn launch_audit(&mut self, domain: String, niche: String, providers: &[Arc<dyn LlmProvider>]) {
         let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
         self.result_rx = Some(rx);
         let providers = providers.to_vec();
@@ -264,7 +271,12 @@ impl ChatApp {
                     providers,
                     &storage,
                     &cache,
-                    TrackOptions { verbose: false, concurrency: 5, judge: None, quiet: true },
+                    TrackOptions {
+                        verbose: false,
+                        concurrency: 5,
+                        judge: None,
+                        quiet: true,
+                    },
                 )
                 .await
                 {
@@ -426,9 +438,7 @@ impl ChatApp {
 
         if let Some(outcome) = result {
             let (domain, niche) = match &self.state {
-                ChatState::Running { domain, niche } => {
-                    (domain.clone(), niche.clone())
-                }
+                ChatState::Running { domain, niche } => (domain.clone(), niche.clone()),
                 _ => ("unknown".to_string(), "unknown".to_string()),
             };
 
@@ -477,7 +487,9 @@ fn render_header(f: &mut Frame, area: Rect) {
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
             "LLMention ",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::styled("Chat", Style::default().fg(Color::White)),
         Span::styled(
@@ -533,8 +545,7 @@ fn render_messages(f: &mut Frame, area: Rect, app: &ChatApp) {
         })
         .collect();
 
-    let list =
-        List::new(visible).block(Block::default().borders(Borders::ALL).title(" Messages "));
+    let list = List::new(visible).block(Block::default().borders(Borders::ALL).title(" Messages "));
     f.render_widget(list, area);
 }
 
@@ -602,9 +613,7 @@ pub async fn run(providers: Vec<Arc<dyn LlmProvider>>) -> Result<()> {
 
         if event::poll(tick)? {
             if let Event::Key(key) = event::read()? {
-                if key.modifiers.contains(KeyModifiers::CONTROL)
-                    && key.code == KeyCode::Char('c')
-                {
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
                     break;
                 }
 
@@ -626,8 +635,7 @@ pub async fn run(providers: Vec<Arc<dyn LlmProvider>>) -> Result<()> {
                         app.scroll = app.scroll.saturating_sub(1);
                     }
                     KeyCode::Down => {
-                        app.scroll =
-                            (app.scroll + 1).min(app.messages.len().saturating_sub(1));
+                        app.scroll = (app.scroll + 1).min(app.messages.len().saturating_sub(1));
                     }
                     _ => {}
                 }
