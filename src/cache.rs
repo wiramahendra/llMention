@@ -37,7 +37,9 @@ impl Cache {
     }
 
     pub fn get(&self, domain: &str, model: &str, prompt: &str) -> Option<String> {
-        let path = self.dir.join(format!("{}.json", Self::key(domain, model, prompt)));
+        let path = self
+            .dir
+            .join(format!("{}.json", Self::key(domain, model, prompt)));
         let contents = std::fs::read_to_string(path).ok()?;
         let entry: CacheEntry = serde_json::from_str(&contents).ok()?;
         let age = Utc::now().signed_duration_since(entry.cached_at);
@@ -45,7 +47,9 @@ impl Cache {
     }
 
     pub fn set(&self, domain: &str, model: &str, prompt: &str, response: &str) -> Result<()> {
-        let path = self.dir.join(format!("{}.json", Self::key(domain, model, prompt)));
+        let path = self
+            .dir
+            .join(format!("{}.json", Self::key(domain, model, prompt)));
         let entry = CacheEntry {
             response: response.to_string(),
             cached_at: Utc::now(),
