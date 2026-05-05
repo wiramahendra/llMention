@@ -99,16 +99,31 @@ pub struct PluginsConfig {
 
 impl Default for PluginsConfig {
     fn default() -> Self {
-        Self { enabled_plugins: Vec::new(), auto_update: false }
+        Self {
+            enabled_plugins: Vec::new(),
+            auto_update: false,
+        }
     }
 }
 
-fn default_true() -> bool { true }
-fn default_ollama_url() -> String { "http://localhost:11434".to_string() }
-fn default_judge_model() -> String { "llama3.2".to_string() }
-fn default_days() -> u32 { 7 }
-fn default_concurrency() -> usize { 5 }
-fn default_timeout() -> u64 { 30 }
+fn default_true() -> bool {
+    true
+}
+fn default_ollama_url() -> String {
+    "http://localhost:11434".to_string()
+}
+fn default_judge_model() -> String {
+    "llama3.2".to_string()
+}
+fn default_days() -> u32 {
+    7
+}
+fn default_concurrency() -> usize {
+    5
+}
+fn default_timeout() -> u64 {
+    30
+}
 
 impl Config {
     pub fn load() -> Result<Self> {
