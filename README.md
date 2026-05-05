@@ -99,13 +99,36 @@ The desktop app wraps the same core library — identical results to the CLI.
 llmention quickstart
 ```
 
-Or manually:
+### New: Evidence-Based Workflow (v0.2+)
+
+The recommended approach using project-level configuration:
+
+```bash
+# 1. Initialize a project
+llmention init --name "MyProject" --website "https://example.com" --category "developer tool" --yes
+
+# 2. Discover prompts for your project
+llmention prompts discover
+
+# 3. Run an audit (use --models mock for testing without API keys)
+llmention audit run --models mock --samples 3
+
+# 4. Generate a report
+llmention report --output ./reports/
+
+# 5. Generate content from audit gaps
+llmention generate --output ./generated/
+```
+
+### Legacy Quick Start
+
+For the original domain-based workflow:
 
 ```bash
 llmention config                                         # 1. create config
 # edit ~/.llmention/config.toml — add API key or enable Ollama
 llmention doctor                                         # 2. verify setup
-llmention audit myproject.com --niche "Rust CLI tool"   # 3. first scan
+llmention audit-legacy myproject.com --niche "Rust CLI tool"   # 3. first scan
 llmention projects add myproject.com --niche "Rust CLI tool"  # 4. save project
 llmention optimize myproject.com --niche "Rust CLI tool" --auto-apply  # 5. improve
 ```
@@ -114,28 +137,28 @@ llmention optimize myproject.com --niche "Rust CLI tool" --auto-apply  # 5. impr
 
 ---
 
-## New: Evidence-First Workflow (v0.2+)
+## Evidence-First Workflow (Recommended)
 
 LLMention v0.2 introduces an **evidence-first approach** with project-level configuration, multi-sample audits, and comprehensive reporting:
 
 ```bash
 # Initialize a project with llmention.toml
-llmention init2 --name "MyProject" --website "https://example.com"
+llmention init --name "MyProject" --website "https://example.com" --yes
 
 # Discover prompts based on your project config
-llmention prompts2 discover
+llmention prompts discover
 
 # Run evidence-based audit with multiple samples
-llmention audit2 run --models mock --samples 3
+llmention audit run --models mock --samples 3
 
 # Generate markdown report
-llmention report2 --output ./reports/
+llmention report --output ./reports/
 
 # Generate content from audit gaps
-llmention generate2 --output ./generated/
+llmention generate --output ./generated/
 
 # Compare two audit runs
-llmention compare --before 1 --after 2
+llmention audit compare --before 1 --after 2
 ```
 
 **Key features:**
@@ -147,6 +170,8 @@ llmention compare --before 1 --after 2
 - **Before/after comparison** — Track visibility improvements over time
 
 See [docs/v0.2-evidence-engine-guide.md](docs/v0.2-evidence-engine-guide.md) for the complete guide.
+
+**Migrating from v0.2 temporary commands:** The temporary `*2` command names (`init2`, `prompts2`, `audit2`, etc.) are deprecated. Use the clean command names shown above. The old commands will continue to work with a deprecation warning.
 
 ---
 
