@@ -62,14 +62,8 @@ pub struct AuditEngine {
 }
 
 impl AuditEngine {
-    pub fn new(
-        providers: Vec<Arc<dyn LlmProvider>>,
-        options: AuditOptions,
-    ) -> Self {
-        Self {
-            providers,
-            options,
-        }
+    pub fn new(providers: Vec<Arc<dyn LlmProvider>>, options: AuditOptions) -> Self {
+        Self { providers, options }
     }
 
     /// Run a full audit for a project
@@ -80,10 +74,12 @@ impl AuditEngine {
         storage: &AuditStorage,
     ) -> Result<AuditRunResult> {
         // Create audit run record (synchronous)
-        let provider_models: Vec<String> = self.providers.iter()
+        let provider_models: Vec<String> = self
+            .providers
+            .iter()
             .map(|p| p.name().to_string())
             .collect();
-        
+
         let run_id = storage.create_audit_run(
             project_id,
             &provider_models,
@@ -109,14 +105,17 @@ impl AuditEngine {
             let prompt_id = if let Some(existing_id) = prompt.id {
                 Some(existing_id)
             } else {
-                Some(storage.insert_prompt(project_id, &NewPrompt {
-                    text: &prompt.text,
-                    intent: prompt.intent.as_deref(),
-                    funnel_stage: prompt.funnel_stage.as_deref(),
-                    priority: prompt.priority,
-                    expected_entity: prompt.expected_entity.as_deref(),
-                    created_by: Some("audit_engine"),
-                })?)
+                Some(storage.insert_prompt(
+                    project_id,
+                    &NewPrompt {
+                        text: &prompt.text,
+                        intent: prompt.intent.as_deref(),
+                        funnel_stage: prompt.funnel_stage.as_deref(),
+                        priority: prompt.priority,
+                        expected_entity: prompt.expected_entity.as_deref(),
+                        created_by: Some("audit_engine"),
+                    },
+                )?)
             };
             stored_prompt_ids.push(prompt_id);
         }
@@ -170,7 +169,11 @@ impl AuditEngine {
                         // Progress
                         let n = completed.fetch_add(1, Ordering::SeqCst) + 1;
                         if !opts.quiet {
-                            let icon = if parse_result.mentioned { "✓".green() } else { "–".dimmed() };
+                            let icon = if parse_result.mentioned {
+                                "✓".green()
+                            } else {
+                                "–".dimmed()
+                            };
                             eprintln!(
                                 "  {} [{:>3}/{}] [{}] sample {} — {}",
                                 icon,
@@ -178,7 +181,11 @@ impl AuditEngine {
                                 total_queries,
                                 provider.name().cyan(),
                                 sample_idx + 1,
-                                if parse_result.mentioned { "mentioned".green() } else { "not mentioned".dimmed() }
+                                if parse_result.mentioned {
+                                    "mentioned".green()
+                                } else {
+                                    "not mentioned".dimmed()
+                                }
                             );
                             if opts.verbose {
                                 eprintln!("      {}", Self::first_line(&response).dimmed());
@@ -197,7 +204,8 @@ impl AuditEngine {
                             sentiment: parse_result.sentiment,
                             citations,
                         })
-                    }.await;
+                    }
+                    .await;
 
                     if let Some(r) = result {
                         all_results.push(r);
@@ -216,7 +224,8 @@ impl AuditEngine {
                     "mentioned": result.mentioned_project,
                     "recommended": result.recommended_project,
                     "timestamp": Utc::now().to_rfc3339(),
-                }).to_string()
+                })
+                .to_string()
             } else {
                 String::new()
             };
@@ -266,7 +275,7 @@ impl AuditEngine {
     fn detect_recommendation(response: &str, project: &str) -> bool {
         let response_lower = response.to_lowercase();
         let project_lower = project.to_lowercase();
-        
+
         // Only check if project is mentioned
         if !response_lower.contains(&project_lower) {
             return false;
@@ -317,14 +326,15 @@ impl AuditEngine {
             let url = cap.get(0).unwrap().as_str().to_string();
             let domain = url.split('/').nth(2).unwrap_or("").to_lowercase();
             let project_domain = project.to_lowercase();
-            
-            let is_project = domain == project_domain 
-                || domain.ends_with(&format!(".{}.{}.{}", 
+
+            let is_project = domain == project_domain
+                || domain.ends_with(&format!(
+                    ".{}.{}.{}",
                     project_domain.split('.').next().unwrap_or(""),
                     project_domain.split('.').nth(1).unwrap_or(""),
                     project_domain.split('.').nth(2).unwrap_or("")
                 ));
-            
+
             citations.push((url, is_project));
         }
 
@@ -390,12 +400,8 @@ pub fn build_providers_for_project(
     filter: Option<&str>,
 ) -> Vec<Arc<dyn LlmProvider>> {
     use crate::providers::{
-        anthropic::AnthropicProvider,
-        gemini::GeminiProvider,
-        ollama::OllamaProvider,
-        openai::OpenAiProvider,
-        perplexity::PerplexityProvider,
-        xai::XaiProvider,
+        anthropic::AnthropicProvider, gemini::GeminiProvider, ollama::OllamaProvider,
+        openai::OpenAiProvider, perplexity::PerplexityProvider, xai::XaiProvider,
     };
 
     let mut providers: Vec<Arc<dyn LlmProvider>> = Vec::new();
@@ -526,22 +532,34 @@ pub fn build_providers_for_project(
     // Fall back to globally enabled providers
     if providers.is_empty() {
         if let Some(ref c) = global_config.providers.openai {
-            if c.enabled { providers.push(Arc::new(OpenAiProvider::new(c.clone()))); }
+            if c.enabled {
+                providers.push(Arc::new(OpenAiProvider::new(c.clone())));
+            }
         }
         if let Some(ref c) = global_config.providers.anthropic {
-            if c.enabled { providers.push(Arc::new(AnthropicProvider::new(c.clone()))); }
+            if c.enabled {
+                providers.push(Arc::new(AnthropicProvider::new(c.clone())));
+            }
         }
         if let Some(ref c) = global_config.providers.gemini {
-            if c.enabled { providers.push(Arc::new(GeminiProvider::new(c.clone()))); }
+            if c.enabled {
+                providers.push(Arc::new(GeminiProvider::new(c.clone())));
+            }
         }
         if let Some(ref c) = global_config.providers.xai {
-            if c.enabled { providers.push(Arc::new(XaiProvider::new(c.clone()))); }
+            if c.enabled {
+                providers.push(Arc::new(XaiProvider::new(c.clone())));
+            }
         }
         if let Some(ref c) = global_config.providers.perplexity {
-            if c.enabled { providers.push(Arc::new(PerplexityProvider::new(c.clone()))); }
+            if c.enabled {
+                providers.push(Arc::new(PerplexityProvider::new(c.clone())));
+            }
         }
         if let Some(ref c) = global_config.providers.ollama {
-            if c.enabled { providers.push(Arc::new(OllamaProvider::new(c.clone()))); }
+            if c.enabled {
+                providers.push(Arc::new(OllamaProvider::new(c.clone())));
+            }
         }
     }
 
@@ -565,9 +583,9 @@ mod tests {
     fn test_extract_citations() {
         let response = "Visit https://example.com/docs and https://myproject.com for more info.";
         let citations = AuditEngine::extract_citations(response, "myproject.com");
-        
+
         assert_eq!(citations.len(), 2);
         assert!(!citations[0].1); // example.com is not project
-        assert!(citations[1].1);  // myproject.com is project
+        assert!(citations[1].1); // myproject.com is project
     }
 }
