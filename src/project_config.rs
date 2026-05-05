@@ -201,7 +201,6 @@ store_raw_responses = true
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::TempDir;
 
     #[test]
