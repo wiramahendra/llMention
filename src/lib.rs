@@ -12,6 +12,7 @@ pub mod project_config;
 pub mod prompt_discovery;
 pub mod providers;
 pub mod report;
+pub mod report_generator;
 pub mod scheduler;
 pub mod storage;
 pub mod tracker;
