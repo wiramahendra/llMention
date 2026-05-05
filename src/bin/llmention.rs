@@ -424,19 +424,6 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
-    /// Generate content assets from audit gaps (deprecated - use 'generate')
-    #[command(name = "generate2", hide = true)]
-    Generate2Deprecated {
-        /// Source audit run ID or "latest"
-        #[arg(short, long, default_value = "latest")]
-        from_audit: String,
-        /// Output directory
-        #[arg(short, long, default_value = "generated")]
-        output: PathBuf,
-        /// Force overwrite existing files
-        #[arg(long)]
-        force: bool,
-    },
     /// Diagnose URL crawlability and AI readiness
     ///
     /// Checks basic crawlability signals that help AI models discover
@@ -445,12 +432,6 @@ enum Commands {
     /// Examples:
     ///   llmention diagnose https://example.com
     Diagnose {
-        /// URL to diagnose
-        url: String,
-    },
-    /// Diagnose URL (deprecated alias - use 'diagnose')
-    #[command(name = "diagnose2", hide = true)]
-    Diagnose2Deprecated {
         /// URL to diagnose
         url: String,
     },
@@ -1376,30 +1357,6 @@ async fn main() -> Result<()> {
             };
 
             // Open audit storage
-            let storage_path = base_dir.join("evidence.db");
-            let storage = AuditStorage::open(&storage_path)?;
-
-            run_report2(&project, &storage, run, &format, output, full, force).await?;
-        }
-
-        Commands::Report2Deprecated { run, format, output, full, force } => {
-            eprintln!("{} 'report2' is deprecated. Use 'llmention report' instead.", "Warning:".yellow());
-            // Load project config
-            let (project, _project_dir) = match ProjectConfig::find_and_load() {
-                Ok(Some((p, d))) => (p, d),
-                Ok(None) => {
-                    println!("\n  {} No llmention.toml found. Run {} first.\n",
-                        "!".yellow(),
-                        "llmention init".cyan()
-                    );
-                    std::process::exit(1);
-                }
-                Err(e) => {
-                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
-                    std::process::exit(1);
-                }
-            };
-
             let storage_path = base_dir.join("evidence.db");
             let storage = AuditStorage::open(&storage_path)?;
 
