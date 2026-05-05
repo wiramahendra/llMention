@@ -63,7 +63,12 @@ pub async fn optimize(
         providers.to_vec(),
         storage,
         cache,
-        TrackOptions { verbose: opts.verbose, concurrency: 5, judge: None, quiet: opts.quiet },
+        TrackOptions {
+            verbose: opts.verbose,
+            concurrency: 5,
+            judge: None,
+            quiet: opts.quiet,
+        },
     )
     .await?;
 
@@ -92,12 +97,7 @@ pub async fn optimize(
     let total = weak.len();
 
     for (i, prompt) in weak.iter().enumerate() {
-        eprint!(
-            "       → [{}/{}] {}…  ",
-            i + 1,
-            total,
-            truncate(prompt, 46)
-        );
+        eprint!("       → [{}/{}] {}…  ", i + 1, total, truncate(prompt, 46));
 
         let gen_opts = GenerateOptions {
             prompt: prompt.clone(),
@@ -161,11 +161,11 @@ pub async fn optimize(
 
             match refiner::refine(prompt, &best_content, &current_eval, providers).await {
                 Some((refined, model)) => {
-                    let new_eval =
-                        match evaluator::score_content(prompt, &refined, providers).await {
-                            Ok(r) => r,
-                            Err(_) => break,
-                        };
+                    let new_eval = match evaluator::score_content(prompt, &refined, providers).await
+                    {
+                        Ok(r) => r,
+                        Err(_) => break,
+                    };
                     let new_score = cite_rate(&new_eval);
 
                     if new_score > score {
@@ -241,8 +241,8 @@ pub async fn optimize(
     }
 
     // Honest lift range: ±8pp uncertainty band
-    let avg = sections.iter().map(|s| s.citability_rate).sum::<f64>()
-        / sections.len().max(1) as f64;
+    let avg =
+        sections.iter().map(|s| s.citability_rate).sum::<f64>() / sections.len().max(1) as f64;
     if !sections.is_empty() {
         let lo = (avg - 8.0).max(0.0);
         let hi = (avg + 8.0).min(100.0);
@@ -284,7 +284,11 @@ fn find_weak_prompts(results: &[crate::types::MentionResult], limit: usize) -> V
         .map(|(p, (m, t))| (*p, *m as f64 / (*t).max(1) as f64))
         .collect();
     sorted.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-    sorted.into_iter().take(limit).map(|(p, _)| p.to_string()).collect()
+    sorted
+        .into_iter()
+        .take(limit)
+        .map(|(p, _)| p.to_string())
+        .collect()
 }
 
 fn count_zero_mention_prompts(results: &[crate::types::MentionResult]) -> usize {
