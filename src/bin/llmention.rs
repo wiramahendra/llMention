@@ -1989,6 +1989,622 @@ fn run_projects_list(storage: &Storage) -> anyhow::Result<()> {
         "\n  {}  llmention audit <domain>  or  llmention optimize <domain> --niche <niche>\n",
         "Tip".yellow().bold()
     );
-    Ok(()
-    )
+    Ok(())
+}
+
+// ── New Evidence-First Command Handlers (v0.2+) ──────────────────────────────
+
+fn run_init2(
+    name: Option<String>,
+    website: Option<String>,
+    category: Option<String>,
+    yes: bool,
+    force: bool,
+) -> Result<()> {
+    use std::io::{self, Write};
+
+    // Check if llmention.toml already exists
+    if PathBuf::from("llmention.toml").exists() && !force {
+        println!("\n  {} llmention.toml already exists", "!".yellow());
+        println!("  Use {} to overwrite\n", "--force".cyan());
+        return Ok(());
+    }
+
+    let mut config = ProjectConfig::default();
+
+    if yes {
+        // Use defaults or provided values
+        config.project.name = name.unwrap_or_else(|| "MyProject".to_string());
+        config.project.website = website.unwrap_or_default();
+        config.project.category = category.unwrap_or_else(|| "developer tool".to_string());
+    } else {
+        // Interactive mode
+        let stdin = io::stdin();
+        let mut stdout = io::stdout();
+        
+        print!("  Project name [{}]: ", name.as_deref().unwrap_or("MyProject"));
+        stdout.flush()?;
+        let mut input = String::new();
+        stdin.read_line(&mut input)?;
+        config.project.name = if input.trim().is_empty() {
+            name.unwrap_or_else(|| "MyProject".to_string())
+        } else {
+            input.trim().to_string()
+        };
+        
+        print!("  Website [{}]: ", website.as_deref().unwrap_or(""));
+        stdout.flush()?;
+        input.clear();
+        stdin.read_line(&mut input)?;
+        config.project.website = if input.trim().is_empty() {
+            website.unwrap_or_default()
+        } else {
+            input.trim().to_string()
+        };
+        
+        print!("  Category [{}]: ", category.as_deref().unwrap_or("developer tool"));
+        stdout.flush()?;
+        input.clear();
+        stdin.read_line(&mut input)?;
+        config.project.category = if input.trim().is_empty() {
+            category.unwrap_or_else(|| "developer tool".to_string())
+        } else {
+            input.trim().to_string()
+        };
+    }
+
+    // Validate
+    config.validate()?;
+
+    // Save
+    let path = config.save_to_dir(&std::env::current_dir()?)?;
+    
+    println!();
+    println!("  {} Created {}", "✓".green().bold(), path.display().to_string().cyan());
+    println!();
+    println!("  Next steps:");
+    println!("    1. Edit {} to customize your project", "llmention.toml".cyan());
+    println!("    2. Run {} to discover prompts", "llmention prompts discover".cyan());
+    println!("    3. Run {} to start auditing", "llmention audit run".cyan());
+    println!();
+
+    Ok(())
+}
+
+async fn run_prompts_discover(
+    project: &ProjectConfig,
+    storage: &AuditStorage,
+    limit: Option<usize>,
+) -> Result<()> {
+    println!();
+    println!("  {} Discovering prompts for {}", 
+        "→".cyan(), 
+        project.project.name.cyan().bold()
+    );
+    println!();
+
+    let discovered = PromptDiscovery::discover(project);
+    let limit = limit.unwrap_or(50);
+    
+    // Store prompts in database
+    let mut stored = 0;
+    for prompt in discovered.iter().take(limit) {
+        let _id = storage.insert_prompt(&project.domain(), &NewPrompt {
+            text: &prompt.text,
+            intent: Some(&prompt.intent),
+            funnel_stage: Some(&prompt.funnel_stage),
+            priority: Some(prompt.priority),
+            expected_entity: Some(&prompt.expected_entity),
+            created_by: Some("discover"),
+        })?;
+        stored += 1;
+        
+        if stored <= 10 {
+            println!("  {} {} — {} ({})",
+                "·".dimmed(),
+                prompt.text.cyan(),
+                prompt.category.as_str().dimmed(),
+                prompt.funnel_stage.dimmed()
+            );
+        }
+    }
+    
+    if stored > 10 {
+        println!("  {} ... and {} more", "·".dimmed(), stored - 10);
+    }
+
+    // Deduplicate
+    let deduped = storage.dedupe_prompts(&project.domain())?;
+    
+    println!();
+    println!("  {} Stored {} prompt(s) (removed {} duplicates)",
+        "✓".green().bold(),
+        stored - deduped,
+        deduped
+    );
+    println!();
+
+    Ok(())
+}
+
+fn run_prompts_list(
+    project: &ProjectConfig,
+    storage: &AuditStorage,
+) -> Result<()> {
+    let prompts = storage.list_prompts(&project.domain())?;
+    
+    if prompts.is_empty() {
+        println!("\n  No prompts found. Run {} first.\n",
+            "llmention prompts discover".cyan()
+        );
+        return Ok(());
+    }
+    
+    println!();
+    println!("  {} prompt(s) for {}",
+        prompts.len().to_string().cyan(),
+        project.project.name.cyan().bold()
+    );
+    println!();
+    
+    for p in prompts.iter().take(20) {
+        let intent = p.intent.as_deref().unwrap_or("-");
+        let stage = p.funnel_stage.as_deref().unwrap_or("-");
+        println!("  {} {} — {} → {}",
+            format!("#{}", p.id).dimmed(),
+            p.prompt_text.cyan(),
+            intent.dimmed(),
+            stage.dimmed()
+        );
+    }
+    
+    if prompts.len() > 20 {
+        println!("  {} ... and {} more", "·".dimmed(), prompts.len() - 20);
+    }
+    println!();
+
+    Ok(())
+}
+
+async fn run_audit_run(
+    project: &ProjectConfig,
+    global_config: &Config,
+    storage: &AuditStorage,
+    samples: Option<usize>,
+    temperature: Option<f32>,
+    models: Option<String>,
+    json: bool,
+) -> Result<()> {
+    // Get prompts
+    let prompts = storage.list_prompts(&project.domain())?;
+    if prompts.is_empty() {
+        println!("\n  {} No prompts found. Run {} first.\n",
+            "!".yellow(),
+            "llmention prompts discover".cyan()
+        );
+        return Ok(());
+    }
+
+    // Build providers
+    let providers = if models.as_deref() == Some("mock") {
+        use llmention::providers::mock::MockProviderBuilder;
+        vec![std::sync::Arc::new(
+            MockProviderBuilder::new("mock")
+                .with_default_response("This is a mock response for testing.")
+                .build()
+        ) as std::sync::Arc<dyn llmention::providers::LlmProvider>]
+    } else {
+        build_providers_for_project(
+            &project.providers,
+            global_config,
+            models.as_deref(),
+        )
+    };
+    
+    if providers.is_empty() {
+        bail!("No providers configured. Check ~/.llmention/config.toml or use --models mock");
+    }
+
+    // Build options
+    let options = AuditOptions {
+        samples_per_prompt: samples.unwrap_or(project.audit.samples_per_prompt),
+        temperature: temperature.unwrap_or(project.audit.temperature),
+        store_raw_responses: project.audit.store_raw_responses,
+        verbose: false,
+        quiet: false,
+        concurrency: global_config.defaults.concurrency,
+    };
+
+    // Create engine and run
+    let engine = AuditEngine::new(providers, options);
+    
+    let prompt_inputs: Vec<PromptInput> = prompts
+        .into_iter()
+        .map(|p| PromptInput {
+            id: Some(p.id),
+            text: p.prompt_text,
+            intent: p.intent,
+            funnel_stage: p.funnel_stage,
+            priority: p.priority,
+            expected_entity: p.expected_entity,
+        })
+        .collect();
+
+    let result = engine.run_audit(&project.domain(), &prompt_inputs, storage).await?;
+
+    // Output
+    if json {
+        println!("{}", serde_json::to_string_pretty(&result.summary)?);
+    } else {
+        println!();
+        println!("  {} Audit Run {}",
+            "✓".green().bold(),
+            result.run_id.to_string().cyan()
+        );
+        println!();
+        println!("  Mention rate:          {:.1}%",
+            result.summary.mention_rate * 100.0
+        );
+        println!("  Recommendation rate:   {:.1}%",
+            result.summary.recommendation_rate * 100.0
+        );
+        println!("  Citation rate:         {:.1}%",
+            result.summary.citation_rate * 100.0
+        );
+        println!("  Total queries:         {}",
+            result.summary.total_queries
+        );
+        println!();
+        println!("  Next: {} to generate content",
+            "llmention generate2".cyan()
+        );
+        println!();
+    }
+
+    Ok(())
+}
+
+fn run_audit_list(
+    project: &ProjectConfig,
+    storage: &AuditStorage,
+    limit: usize,
+) -> Result<()> {
+    let runs = storage.list_audit_runs(&project.domain(), limit)?;
+    
+    if runs.is_empty() {
+        println!("\n  No audit runs found. Run {} first.\n",
+            "llmention audit run".cyan()
+        );
+        return Ok(());
+    }
+    
+    println!();
+    println!("  {} audit run(s) for {}",
+        runs.len().to_string().cyan(),
+        project.project.name.cyan().bold()
+    );
+    println!();
+    
+    for r in &runs {
+        let status_icon = match r.status.as_str() {
+            "completed" => "✓".green(),
+            "failed" => "✗".red(),
+            _ => "○".yellow(),
+        };
+        
+        let summary = r.summary_json.as_deref()
+            .and_then(|s| serde_json::from_str::<llmention::audit_storage::AuditSummary>(s).ok());
+        
+        if let Some(s) = summary {
+            println!("  {} Run {} — {:.0}% mentioned — {}/{}/{} — {}",
+                status_icon,
+                r.id.to_string().cyan(),
+                s.mention_rate * 100.0,
+                r.started_at.split('T').next().unwrap_or("-").dimmed(),
+                format!("{} samples", r.samples_per_prompt).dimmed(),
+                format!("{:.1} temp", r.temperature).dimmed(),
+                r.status.dimmed()
+            );
+        } else {
+            println!("  {} Run {} — {} — {}",
+                status_icon,
+                r.id.to_string().cyan(),
+                r.started_at.split('T').next().unwrap_or("-").dimmed(),
+                r.status.dimmed()
+            );
+        }
+    }
+    println!();
+
+    Ok(())
+}
+
+fn run_audit_show(
+    storage: &AuditStorage,
+    id: i64,
+) -> Result<()> {
+    let run = storage.get_audit_run(id)?;
+    let results = storage.get_audit_results(id)?;
+    
+    match run {
+        Some(r) => {
+            println!();
+            println!("  {} Audit Run {}", "→".cyan(), r.id.to_string().cyan().bold());
+            println!();
+            println!("  Project:     {}", r.project_id.cyan());
+            println!("  Started:     {}", r.started_at.dimmed());
+            println!("  Status:      {}", r.status);
+            println!("  Samples:     {}", r.samples_per_prompt);
+            println!("  Temperature: {}", r.temperature);
+            println!();
+            println!("  Results:     {} row(s)", results.len());
+            println!();
+        }
+        None => {
+            println!("\n  {} Audit run {} not found\n", "✗".red(), id);
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_report2(
+    project: &ProjectConfig,
+    storage: &AuditStorage,
+    run: Option<i64>,
+    _format: &str,
+    output: PathBuf,
+    full: bool,
+    force: bool,
+) -> Result<()> {
+    // Get audit run ID
+    let run_id = match run {
+        Some(id) => id,
+        None => {
+            let runs = storage.list_audit_runs(&project.domain(), 1)?;
+            runs.first().map(|r| r.id)
+                .ok_or_else(|| anyhow::anyhow!("No audit runs found"))?
+        }
+    };
+
+    // Generate report
+    let generator = llmention::report_generator::ReportGenerator::new(
+        project.clone(),
+        storage.clone()
+    );
+    let report = generator.generate_markdown_report(run_id, full)?;
+
+    // Write to file
+    if !output.exists() {
+        std::fs::create_dir_all(&output)?;
+    }
+
+    let filename = generate_report_filename(&project.project.name, run_id);
+    let path = output.join(&filename);
+
+    if path.exists() && !force {
+        println!("\n  {} Report {} already exists", "!".yellow(), path.display().to_string().dimmed());
+        println!("  Use {} to overwrite\n", "--force".cyan());
+        return Ok(());
+    }
+
+    std::fs::write(&path, &report)?;
+
+    println!();
+    println!("  {} Generated report: {}", "✓".green().bold(), path.display().to_string().cyan());
+    println!();
+
+    Ok(())
+}
+
+fn run_generate2(
+    project: &ProjectConfig,
+    storage: &AuditStorage,
+    from_audit: &str,
+    output_dir: PathBuf,
+    force: bool,
+) -> Result<()> {
+    // Get audit run
+    let run_id = if from_audit == "latest" {
+        let runs = storage.list_audit_runs(&project.domain(), 1)?;
+        runs.first().map(|r| r.id).ok_or_else(|| anyhow::anyhow!("No audit runs found"))?
+    } else {
+        from_audit.parse::<i64>()?
+    };
+
+    let results = storage.get_audit_results(run_id)?;
+    
+    if results.is_empty() {
+        bail!("No results found for audit run {}", run_id);
+    }
+
+    // Identify gaps
+    let generator = ContentGenerator::new(project.clone());
+    let gaps = generator.identify_gaps(&results, &project.competitors.names);
+    
+    // Generate assets
+    let assets = generator.generate_assets(&gaps);
+    
+    // Create output directory
+    if !output_dir.exists() {
+        std::fs::create_dir_all(&output_dir)?;
+    }
+    
+    // Write assets
+    let mut written = 0;
+    for asset in &assets {
+        let path = output_dir.join(&asset.filename);
+        
+        if path.exists() && !force {
+            println!("  {} {} exists (use --force to overwrite)",
+                "!".yellow(),
+                path.display().to_string().dimmed()
+            );
+            continue;
+        }
+        
+        std::fs::write(&path, &asset.content)?;
+        
+        // Store in database
+        storage.insert_generated_asset(&NewGeneratedAsset {
+            project_id: &project.domain(),
+            audit_run_id: Some(run_id),
+            asset_type: asset.asset_type.as_str(),
+            title: &asset.title,
+            slug: &asset.slug,
+            markdown_content: &asset.content,
+        })?;
+        
+        println!("  {} {}", "✓".green(), path.display().to_string().cyan());
+        written += 1;
+    }
+    
+    println!();
+    println!("  Written {} file(s) to {}", written, output_dir.display().to_string().cyan());
+    println!();
+
+    Ok(())
+}
+
+async fn run_compare(
+    storage: &AuditStorage,
+    before: i64,
+    after: i64,
+    format: &str,
+) -> Result<()> {
+    let before_run = storage.get_audit_run(before)?;
+    let after_run = storage.get_audit_run(after)?;
+    
+    if before_run.is_none() || after_run.is_none() {
+        bail!("One or both audit runs not found");
+    }
+    
+    let before_summary = storage.get_audit_summary(before)?;
+    let after_summary = storage.get_audit_summary(after)?;
+    
+    let mention_delta = (after_summary.mention_rate - before_summary.mention_rate) * 100.0;
+    let rec_delta = (after_summary.recommendation_rate - before_summary.recommendation_rate) * 100.0;
+    let cit_delta = (after_summary.citation_rate - before_summary.citation_rate) * 100.0;
+    
+    if format == "json" {
+        let comparison = serde_json::json!({
+            "before_run": before,
+            "after_run": after,
+            "before": before_summary,
+            "after": after_summary,
+            "deltas": {
+                "mention_rate_pp": mention_delta,
+                "recommendation_rate_pp": rec_delta,
+                "citation_rate_pp": cit_delta,
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&comparison)?);
+    } else {
+        println!();
+        println!("  {} Audit Comparison", "→".cyan());
+        println!();
+        println!("  Before: Run {}  →  After: Run {}",
+            before.to_string().cyan(),
+            after.to_string().cyan()
+        );
+        println!();
+        
+        let format_delta = |d: f64| {
+            if d > 0.0 {
+                format!("+{:.1}pp", d).green().to_string()
+            } else if d < 0.0 {
+                format!("{:.1}pp", d).red().to_string()
+            } else {
+                "→ 0pp".dimmed().to_string()
+            }
+        };
+        
+        println!("  Mention rate:        {:.1}% → {:.1}%  {}",
+            before_summary.mention_rate * 100.0,
+            after_summary.mention_rate * 100.0,
+            format_delta(mention_delta)
+        );
+        println!("  Recommendation:      {:.1}% → {:.1}%  {}",
+            before_summary.recommendation_rate * 100.0,
+            after_summary.recommendation_rate * 100.0,
+            format_delta(rec_delta)
+        );
+        println!("  Citation rate:       {:.1}% → {:.1}%  {}",
+            before_summary.citation_rate * 100.0,
+            after_summary.citation_rate * 100.0,
+            format_delta(cit_delta)
+        );
+        println!();
+    }
+
+    Ok(())
+}
+
+async fn run_diagnose2(url: &str) -> Result<()> {
+    use reqwest::Client;
+    
+    println!();
+    println!("  {} Diagnosing {}", "→".cyan(), url.cyan().bold());
+    println!();
+    
+    let client = Client::new();
+    
+    // Check main URL
+    let main_res = client.get(url).send().await;
+    match main_res {
+        Ok(r) if r.status().is_success() => {
+            println!("  {} Homepage reachable ({})", 
+                "✓".green(),
+                r.status().to_string().dimmed()
+            );
+        }
+        Ok(r) => {
+            println!("  {} Homepage returned {}", "!".yellow(), r.status());
+        }
+        Err(e) => {
+            println!("  {} Homepage unreachable: {}", "✗".red(), e);
+        }
+    }
+    
+    // Check robots.txt
+    let robots_url = format!("{}/robots.txt", url.trim_end_matches('/'));
+    match client.get(&robots_url).send().await {
+        Ok(r) if r.status().is_success() => {
+            println!("  {} robots.txt exists", "✓".green());
+        }
+        _ => {
+            println!("  {} robots.txt not found (recommended)", "○".dimmed());
+        }
+    }
+    
+    // Check sitemap.xml
+    let sitemap_url = format!("{}/sitemap.xml", url.trim_end_matches('/'));
+    match client.get(&sitemap_url).send().await {
+        Ok(r) if r.status().is_success() => {
+            println!("  {} sitemap.xml exists", "✓".green());
+        }
+        _ => {
+            println!("  {} sitemap.xml not found (recommended for SEO)", "○".dimmed());
+        }
+    }
+    
+    // Check for llms.txt
+    let llms_url = format!("{}/llms.txt", url.trim_end_matches('/'));
+    match client.get(&llms_url).send().await {
+        Ok(r) if r.status().is_success() => {
+            println!("  {} llms.txt exists", "✓".green());
+        }
+        _ => {
+            println!("  {} llms.txt not found (generate with: llmention generate2)", 
+                "○".dimmed()
+            );
+        }
+    }
+    
+    println!();
+    println!("  Note: This checks basic crawlability only.");
+    println!("  AI visibility depends on content quality, training data, and model behavior.");
+    println!();
+
+    Ok(())
 }
