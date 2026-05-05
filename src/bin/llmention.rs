@@ -1186,105 +1186,6 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Prompts { action } => match action {
-            PromptMarketAction::List => {
-                use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
-                println!();
-                println!("  {}  {} available", "Community Templates".bold(),
-                    registry::BUILTIN_TEMPLATES.len().to_string().cyan());
-                println!("{}", "─".repeat(64).dimmed());
-                println!();
-                let mut table = Table::new();
-                table.set_content_arrangement(ContentArrangement::Dynamic);
-                table.set_header(vec![
-                    Cell::new("Name").add_attribute(Attribute::Bold),
-                    Cell::new("Description").add_attribute(Attribute::Bold),
-                    Cell::new("Tags").add_attribute(Attribute::Bold),
-                ]);
-                for t in registry::BUILTIN_TEMPLATES {
-                    table.add_row(vec![
-                        Cell::new(t.name).fg(Color::Cyan),
-                        Cell::new(t.description),
-                        Cell::new(t.tags.join(", ")).fg(Color::DarkGrey),
-                    ]);
-                }
-                println!("{table}");
-                println!(
-                    "\n  {}  llmention prompts install <name>\n",
-                    "→".cyan()
-                );
-            }
-            PromptMarketAction::Search { query } => {
-                use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
-                let results = registry::search_templates(&query);
-                println!();
-                println!("  {}  {} match(es) for \"{}\"",
-                    "Search".bold(), results.len().to_string().cyan(), query);
-                println!("{}", "─".repeat(64).dimmed());
-                if results.is_empty() {
-                    println!("\n  No templates matched your query.\n");
-                } else {
-                    println!();
-                    let mut table = Table::new();
-                    table.set_content_arrangement(ContentArrangement::Dynamic);
-                    table.set_header(vec![
-                        Cell::new("Name").add_attribute(Attribute::Bold),
-                        Cell::new("Description").add_attribute(Attribute::Bold),
-                        Cell::new("Tags").add_attribute(Attribute::Bold),
-                    ]);
-                    for t in results {
-                        table.add_row(vec![
-                            Cell::new(t.name).fg(Color::Cyan),
-                            Cell::new(t.description),
-                            Cell::new(t.tags.join(", ")).fg(Color::DarkGrey),
-                        ]);
-                    }
-                    println!("{table}");
-                    println!();
-                }
-            }
-            PromptMarketAction::Install { name } => {
-                match registry::find_template(&name) {
-                    None => {
-                        println!("\n  {}  Template {} not found. Run {} to see available templates.\n",
-                            "✗".red().bold(), name.cyan(), "llmention prompts list".cyan());
-                    }
-                    Some(info) => {
-                        let plugin_dir = base_dir.join("plugins").join(&name);
-                        std::fs::create_dir_all(&plugin_dir)?;
-
-                        let manifest = format!(
-                            "[meta]\nname = \"{}\"\nversion = \"1.0.0\"\ndescription = \"{}\"\nauthor = \"{}\"\ntags = [{}]\n\n[templates]\n{}{}\n",
-                            info.name,
-                            info.description,
-                            info.author,
-                            info.tags.iter().map(|t| format!("\"{}\"", t)).collect::<Vec<_>>().join(", "),
-                            builtin::generate_template(&name).map(|_| "generate = \"generate.prompt.md\"\n").unwrap_or(""),
-                            builtin::discover_template(&name).map(|_| "discover = \"discover.prompt.md\"\n").unwrap_or(""),
-                        );
-                        std::fs::write(plugin_dir.join("plugin.toml"), &manifest)?;
-
-                        if let Some(gen_tpl) = builtin::generate_template(&name) {
-                            std::fs::write(plugin_dir.join("generate.prompt.md"), gen_tpl)?;
-                        }
-                        if let Some(disc_tpl) = builtin::discover_template(&name) {
-                            std::fs::write(plugin_dir.join("discover.prompt.md"), disc_tpl)?;
-                        }
-
-                        println!("\n  {}  Installed {} to {}\n",
-                            "✓".green().bold(),
-                            name.cyan(),
-                            plugin_dir.display().to_string().dimmed());
-                        println!("  {}  Edit templates at:", "Tip".yellow().bold());
-                        println!("     {}", plugin_dir.display().to_string().cyan());
-                        println!("\n  {}  Use it with:\n  {}\n",
-                            "→".cyan(),
-                            format!("llmention generate \"...\" --plugin {} --about \"...\"", name).cyan());
-                    }
-                }
-            }
-        },
-
         Commands::Share { domain, days, format } => {
             let results = storage.query_domain(&domain, days)?;
             if results.is_empty() {
@@ -1335,8 +1236,6 @@ async fn main() -> Result<()> {
         Commands::Docs => {
             print!("{}", generate_docs());
         }
-
-        Commands::Init => run_init()?,
 
         Commands::Schedule { domain, niche, interval, uninstall } => {
             let parsed_interval = match interval.as_str() {
