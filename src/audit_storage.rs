@@ -237,7 +237,7 @@ impl AuditStorage {
         Ok(())
     }
 
-    pub fn fail_audit_run(&self, run_id: i64, error: &str) -> Result<()> {
+    pub fn fail_audit_run(&self, run_id: i64, _error: &str) -> Result<()> {
         self.conn.execute(
             "UPDATE audit_runs 
              SET status = 'failed', completed_at = ?1
