@@ -26,7 +26,9 @@ pub fn build_critique(results: &[EvalResult]) -> String {
                 "• {} ({:.0}% confidence): {}",
                 r.model,
                 r.confidence * 100.0,
-                r.reason.as_deref().unwrap_or("would not cite — no reason given")
+                r.reason
+                    .as_deref()
+                    .unwrap_or("would not cite — no reason given")
             )
         })
         .collect::<Vec<_>>()
@@ -51,7 +53,10 @@ pub async fn refine(
     );
 
     for provider in providers {
-        match provider.query_with_system(Some(REFINE_SYSTEM), &user_msg).await {
+        match provider
+            .query_with_system(Some(REFINE_SYSTEM), &user_msg)
+            .await
+        {
             Ok(refined) => {
                 let trimmed = refined.trim().to_string();
                 if trimmed.len() > 100 {
