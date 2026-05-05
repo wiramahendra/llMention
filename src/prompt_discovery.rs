@@ -85,35 +85,38 @@ impl PromptDiscovery {
     pub fn discover(project: &ProjectConfig) -> Vec<DiscoveredPrompt> {
         let mut prompts = Vec::new();
         let info = &project.project;
-        
+
         // Generate prompts for each category
         prompts.extend(Self::category_prompts(info));
-        prompts.extend(Self::competitor_alternative_prompts(info, &project.competitors.names));
+        prompts.extend(Self::competitor_alternative_prompts(
+            info,
+            &project.competitors.names,
+        ));
         prompts.extend(Self::problem_aware_prompts(info));
         prompts.extend(Self::solution_aware_prompts(info));
         prompts.extend(Self::comparison_prompts(info, &project.competitors.names));
         prompts.extend(Self::buyer_intent_prompts(info));
-        
+
         // Deduplicate
         Self::deduplicate(prompts)
     }
 
     fn category_prompts(info: &ProjectInfo) -> Vec<DiscoveredPrompt> {
         let mut prompts = Vec::new();
-        
+
         if !info.category.is_empty() {
             prompts.push(DiscoveredPrompt::new(
                 format!("What are the best {}?", info.category),
                 PromptCategory::Category,
                 info,
             ));
-            
+
             prompts.push(DiscoveredPrompt::new(
                 format!("Best {} 2026", info.category),
                 PromptCategory::Category,
                 info,
             ));
-            
+
             for audience in &info.audience {
                 prompts.push(DiscoveredPrompt::new(
                     format!("Best {} for {}", info.category, audience),
@@ -122,7 +125,7 @@ impl PromptDiscovery {
                 ));
             }
         }
-        
+
         // Use keywords/topics if available
         if info.category.contains("GEO") || info.category.contains("visibility") {
             prompts.push(DiscoveredPrompt::new(
@@ -136,34 +139,37 @@ impl PromptDiscovery {
                 info,
             ));
         }
-        
+
         prompts
     }
 
-    fn competitor_alternative_prompts(info: &ProjectInfo, competitors: &[String]) -> Vec<DiscoveredPrompt> {
+    fn competitor_alternative_prompts(
+        info: &ProjectInfo,
+        competitors: &[String],
+    ) -> Vec<DiscoveredPrompt> {
         let mut prompts = Vec::new();
         let project_name = &info.name;
-        
+
         for competitor in competitors {
             prompts.push(DiscoveredPrompt::new(
                 format!("What are alternatives to {}?", competitor),
                 PromptCategory::CompetitorAlternative,
                 info,
             ));
-            
+
             prompts.push(DiscoveredPrompt::new(
                 format!("{} vs {}", competitor, project_name),
                 PromptCategory::CompetitorAlternative,
                 info,
             ));
-            
+
             prompts.push(DiscoveredPrompt::new(
                 format!("Open source alternatives to {}", competitor),
                 PromptCategory::CompetitorAlternative,
                 info,
             ));
         }
-        
+
         if competitors.is_empty() {
             // Generic alternatives if no competitors specified
             prompts.push(DiscoveredPrompt::new(
@@ -172,69 +178,72 @@ impl PromptDiscovery {
                 info,
             ));
         }
-        
+
         prompts
     }
 
     fn problem_aware_prompts(info: &ProjectInfo) -> Vec<DiscoveredPrompt> {
         let mut prompts = Vec::new();
         let project_name = &info.name;
-        
+
         prompts.push(DiscoveredPrompt::new(
-            format!("How can I track whether AI models mention {}?", project_name),
+            format!(
+                "How can I track whether AI models mention {}?",
+                project_name
+            ),
             PromptCategory::ProblemAware,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("How do I know if ChatGPT recommends {}?", project_name),
             PromptCategory::ProblemAware,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             "How to check if my startup is mentioned by AI".to_string(),
             PromptCategory::ProblemAware,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             "Why isn't my product showing up in AI recommendations?".to_string(),
             PromptCategory::ProblemAware,
             info,
         ));
-        
+
         prompts
     }
 
     fn solution_aware_prompts(info: &ProjectInfo) -> Vec<DiscoveredPrompt> {
         let mut prompts = Vec::new();
         let project_name = &info.name;
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("What is {}?", project_name),
             PromptCategory::SolutionAware,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("How does {} work?", project_name),
             PromptCategory::SolutionAware,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("{}", project_name),
             PromptCategory::SolutionAware,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("Getting started with {}", project_name),
             PromptCategory::SolutionAware,
             info,
         ));
-        
+
         if !info.category.is_empty() {
             prompts.push(DiscoveredPrompt::new(
                 format!("Tools that help with {}", info.category),
@@ -242,21 +251,21 @@ impl PromptDiscovery {
                 info,
             ));
         }
-        
+
         prompts
     }
 
     fn comparison_prompts(info: &ProjectInfo, competitors: &[String]) -> Vec<DiscoveredPrompt> {
         let mut prompts = Vec::new();
         let project_name = &info.name;
-        
+
         if !info.category.is_empty() {
             prompts.push(DiscoveredPrompt::new(
                 format!("Compare {} tools", info.category),
                 PromptCategory::Comparison,
                 info,
             ));
-            
+
             for audience in &info.audience {
                 prompts.push(DiscoveredPrompt::new(
                     format!("Compare {} tools for {}", info.category, audience),
@@ -265,7 +274,7 @@ impl PromptDiscovery {
                 ));
             }
         }
-        
+
         // Compare with competitors
         for competitor in competitors.iter().take(3) {
             prompts.push(DiscoveredPrompt::new(
@@ -274,27 +283,27 @@ impl PromptDiscovery {
                 info,
             ));
         }
-        
+
         prompts
     }
 
     fn buyer_intent_prompts(info: &ProjectInfo) -> Vec<DiscoveredPrompt> {
         let mut prompts = Vec::new();
         let project_name = &info.name;
-        
+
         if !info.category.is_empty() {
             prompts.push(DiscoveredPrompt::new(
                 format!("Which {} should I use?", info.category),
                 PromptCategory::BuyerIntent,
                 info,
             ));
-            
+
             prompts.push(DiscoveredPrompt::new(
                 format!("Best {} for production", info.category),
                 PromptCategory::BuyerIntent,
                 info,
             ));
-            
+
             for audience in &info.audience {
                 prompts.push(DiscoveredPrompt::new(
                     format!("Best {} for {}", info.category, audience),
@@ -303,32 +312,32 @@ impl PromptDiscovery {
                 ));
             }
         }
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("Should I use {}?", project_name),
             PromptCategory::BuyerIntent,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("Is {} worth it?", project_name),
             PromptCategory::BuyerIntent,
             info,
         ));
-        
+
         prompts.push(DiscoveredPrompt::new(
             format!("{} review", project_name),
             PromptCategory::BuyerIntent,
             info,
         ));
-        
+
         prompts
     }
 
     fn deduplicate(prompts: Vec<DiscoveredPrompt>) -> Vec<DiscoveredPrompt> {
         let mut seen = std::collections::HashSet::new();
         let mut result = Vec::new();
-        
+
         for prompt in prompts {
             let normalized = Self::normalize(&prompt.text);
             if !seen.contains(&normalized) && !normalized.is_empty() {
@@ -336,7 +345,7 @@ impl PromptDiscovery {
                 result.push(prompt);
             }
         }
-        
+
         result
     }
 
@@ -403,16 +412,17 @@ mod tests {
     fn test_discover_generates_prompts() {
         let project = test_project();
         let prompts = PromptDiscovery::discover(&project);
-        
+
         assert!(!prompts.is_empty());
-        
+
         // Should have prompts from different categories
-        let categories: std::collections::HashSet<_> = prompts.iter()
-            .map(|p| p.category)
-            .collect();
-        
-        assert!(categories.len() >= 3, "Should have prompts from multiple categories");
-        
+        let categories: std::collections::HashSet<_> = prompts.iter().map(|p| p.category).collect();
+
+        assert!(
+            categories.len() >= 3,
+            "Should have prompts from multiple categories"
+        );
+
         // Should deduplicate
         let texts: Vec<_> = prompts.iter().map(|p| &p.text).collect();
         let unique_texts: std::collections::HashSet<_> = texts.iter().collect();
@@ -423,7 +433,7 @@ mod tests {
     fn test_prompt_metadata() {
         let project = test_project();
         let prompts = PromptDiscovery::discover(&project);
-        
+
         for prompt in &prompts {
             assert!(!prompt.text.is_empty());
             assert!(!prompt.expected_entity.is_empty());
