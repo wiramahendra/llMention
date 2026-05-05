@@ -216,7 +216,7 @@ impl ContentGenerator {
         }
     }
 
-    fn generate_comparison_page(&self, prompt: &str, competitors: &[String]) -> String {
+    fn generate_comparison_page(&self, _prompt: &str, competitors: &[String]) -> String {
         let project = &self.project.project;
         let comp_list = if competitors.is_empty() {
             "CompetitorA, CompetitorB".to_string()
