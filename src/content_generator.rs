@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{
-    audit_storage::AuditResult,
-    project_config::ProjectConfig,
-};
+use crate::{audit_storage::AuditResult, project_config::ProjectConfig};
 
 /// Types of content assets that can be generated
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,22 +95,33 @@ impl ContentGenerator {
     }
 
     /// Analyze audit results and identify content gaps
-    pub fn identify_gaps(&self, results: &[AuditResult], competitors: &[String]) -> Vec<ContentGap> {
+    pub fn identify_gaps(
+        &self,
+        results: &[AuditResult],
+        competitors: &[String],
+    ) -> Vec<ContentGap> {
         let mut gaps = Vec::new();
 
         // Group results by prompt
         let mut by_prompt: HashMap<String, Vec<&AuditResult>> = HashMap::new();
         for r in results {
-            by_prompt.entry(r.response_text.clone()).or_default().push(r);
+            by_prompt
+                .entry(r.response_text.clone())
+                .or_default()
+                .push(r);
         }
 
         for (prompt, prompt_results) in by_prompt {
-            let mention_count = prompt_results.iter().filter(|r| r.mentioned_project).count();
+            let mention_count = prompt_results
+                .iter()
+                .filter(|r| r.mentioned_project)
+                .count();
             let total = prompt_results.len();
             let mention_rate = mention_count as f64 / total as f64;
 
             // Collect competitors mentioned
-            let mut comps_mentioned: Vec<String> = prompt_results.iter()
+            let mut comps_mentioned: Vec<String> = prompt_results
+                .iter()
                 .flat_map(|r| self.extract_competitors(&r.response_text, competitors))
                 .collect();
             comps_mentioned.sort();
@@ -134,10 +142,13 @@ impl ContentGenerator {
                 });
             } else if mention_rate < 0.5 {
                 // Low mention rate
-                let cited_count = prompt_results.iter().filter(|r| {
-                    // Check if project citations exist
-                    r.mentioned_project // Simplified - would check citations table in real impl
-                }).count();
+                let cited_count = prompt_results
+                    .iter()
+                    .filter(|r| {
+                        // Check if project citations exist
+                        r.mentioned_project // Simplified - would check citations table in real impl
+                    })
+                    .count();
 
                 if mention_count > 0 && cited_count == 0 {
                     gaps.push(ContentGap {
@@ -146,7 +157,8 @@ impl ContentGenerator {
                         priority: GapPriority::High,
                         competitors_mentioned: comps_mentioned.clone(),
                         suggested_asset_type: AssetType::DocsSummary,
-                        reasoning: "Project mentioned but not cited. Add authoritative URLs.".to_string(),
+                        reasoning: "Project mentioned but not cited. Add authoritative URLs."
+                            .to_string(),
                     });
                 } else {
                     gaps.push(ContentGap {
@@ -185,9 +197,11 @@ impl ContentGenerator {
     fn generate_asset_for_gap(&self, gap: &ContentGap) -> GeneratedAssetContent {
         let project = &self.project.project;
         let slug = self.slugify(&gap.prompt);
-        
+
         let content = match gap.suggested_asset_type {
-            AssetType::ComparisonPage => self.generate_comparison_page(&gap.prompt, &gap.competitors_mentioned),
+            AssetType::ComparisonPage => {
+                self.generate_comparison_page(&gap.prompt, &gap.competitors_mentioned)
+            }
             AssetType::AlternativesPage => self.generate_alternatives_page(&gap.prompt),
             AssetType::UseCasePage => self.generate_use_case_page(&gap.prompt),
             AssetType::FaqPage => self.generate_faq_page(&gap.prompt),
@@ -224,7 +238,8 @@ impl ContentGenerator {
             competitors.join(", ")
         };
 
-        format!(r#"# {} vs {}
+        format!(
+            r#"# {} vs {}
 
 ## Overview
 
@@ -263,7 +278,11 @@ Visit [{}]({}) to learn more.
             project.name,
             comp_list.split(", ").next().unwrap_or("Competitors"),
             project.category,
-            project.audience.first().map(|a| a.as_str()).unwrap_or("developers"),
+            project
+                .audience
+                .first()
+                .map(|a| a.as_str())
+                .unwrap_or("developers"),
             project.name,
             project.description,
             project.name,
@@ -274,8 +293,9 @@ Visit [{}]({}) to learn more.
 
     fn generate_alternatives_page(&self, _prompt: &str) -> String {
         let project = &self.project.project;
-        
-        format!(r#"# Alternatives to {}
+
+        format!(
+            r#"# Alternatives to {}
 
 ## Why Consider Alternatives?
 
@@ -322,8 +342,9 @@ While {} is an excellent choice for {}, there are scenarios where alternatives m
 
     fn generate_use_case_page(&self, prompt: &str) -> String {
         let project = &self.project.project;
-        
-        format!(r#"# {} Use Cases
+
+        format!(
+            r#"# {} Use Cases
 
 ## Overview
 
@@ -380,8 +401,9 @@ While {} is an excellent choice for {}, there are scenarios where alternatives m
 
     fn generate_faq_page(&self, _prompt: &str) -> String {
         let project = &self.project.project;
-        
-        format!(r#"# {} Frequently Asked Questions
+
+        format!(
+            r#"# {} Frequently Asked Questions
 
 ## General Questions
 
@@ -443,8 +465,9 @@ For more help, visit [{}]({}).
 
     fn generate_docs_summary(&self) -> String {
         let project = &self.project.project;
-        
-        format!(r#"# {} - Quick Reference
+
+        format!(
+            r#"# {} - Quick Reference
 
 ## What is {}?
 
@@ -484,18 +507,15 @@ Full documentation: [{}]({})
 
 *This is a citation-optimized summary for LLM visibility.*
 "#,
-            project.name,
-            project.name,
-            project.description,
-            project.name,
-            project.website
+            project.name, project.name, project.description, project.name, project.website
         )
     }
 
     fn generate_readme_patch(&self) -> String {
         let project = &self.project.project;
-        
-        format!(r#"# README GEO Optimization Patch for {}
+
+        format!(
+            r#"# README GEO Optimization Patch for {}
 
 Add this section to your README.md to improve AI visibility:
 
@@ -559,8 +579,9 @@ Run `llmention audit {}` to verify improvements.
 
     fn generate_llms_txt(&self) -> String {
         let project = &self.project.project;
-        
-        format!(r#"# llms.txt for {}
+
+        format!(
+            r#"# llms.txt for {}
 
 ## Entity Definition
 
@@ -621,7 +642,8 @@ See https://llmstxt.org/ for the llms.txt specification.
 
     fn extract_competitors(&self, text: &str, known_competitors: &[String]) -> Vec<String> {
         let text_lower = text.to_lowercase();
-        known_competitors.iter()
+        known_competitors
+            .iter()
             .filter(|c| text_lower.contains(&c.to_lowercase()))
             .cloned()
             .collect()
@@ -629,8 +651,11 @@ See https://llmstxt.org/ for the llms.txt specification.
 
     fn suggest_asset_type(&self, prompt: &str, competitors: &[String]) -> AssetType {
         let prompt_lower = prompt.to_lowercase();
-        
-        if prompt_lower.contains("vs") || prompt_lower.contains("compare") || prompt_lower.contains("versus") {
+
+        if prompt_lower.contains("vs")
+            || prompt_lower.contains("compare")
+            || prompt_lower.contains("versus")
+        {
             AssetType::ComparisonPage
         } else if prompt_lower.contains("alternative") {
             AssetType::AlternativesPage
@@ -678,21 +703,23 @@ pub struct GenerationReport {
 impl GenerationReport {
     pub fn print(&self) {
         use colored::Colorize;
-        
+
         println!();
         println!("{}", "━".repeat(64).dimmed());
         println!("  {}", "Content Generation Report".bold());
         println!("{}", "━".repeat(64).dimmed());
         println!();
-        
-        println!("  Generated {} asset(s) from {} gap(s)", 
+
+        println!(
+            "  Generated {} asset(s) from {} gap(s)",
             self.assets.len().to_string().cyan(),
             self.total_gaps.to_string().cyan()
         );
         println!();
-        
+
         for (i, asset) in self.assets.iter().enumerate() {
-            println!("  {}. {} — {}",
+            println!(
+                "  {}. {} — {}",
                 i + 1,
                 asset.title.cyan(),
                 asset.asset_type.display_name().dimmed()
@@ -701,7 +728,7 @@ impl GenerationReport {
             println!("     Gap: {}", asset.source_gap.reasoning.dimmed());
             println!();
         }
-        
+
         println!("{}", "━".repeat(64).dimmed());
         println!("  Next steps:");
         println!("    1. Review generated files in ./generated/");
@@ -735,12 +762,12 @@ mod tests {
     #[test]
     fn test_suggest_asset_type() {
         let gen = ContentGenerator::new(test_project());
-        
+
         assert_eq!(
             gen.suggest_asset_type("Compare TestProject vs CompA", &["CompA".to_string()]),
             AssetType::ComparisonPage
         );
-        
+
         assert_eq!(
             gen.suggest_asset_type("What is TestProject?", &[]),
             AssetType::UseCasePage
@@ -750,6 +777,9 @@ mod tests {
     #[test]
     fn test_slugify() {
         let gen = ContentGenerator::new(test_project());
-        assert_eq!(gen.slugify("What is the best tool?"), "what-is-the-best-tool");
+        assert_eq!(
+            gen.slugify("What is the best tool?"),
+            "what-is-the-best-tool"
+        );
     }
 }
