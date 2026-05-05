@@ -24,51 +24,54 @@ impl ReportGenerator {
         run_id: i64,
         include_full_responses: bool,
     ) -> Result<String> {
-        let run = self.storage.get_audit_run(run_id)?
+        let run = self
+            .storage
+            .get_audit_run(run_id)?
             .ok_or_else(|| anyhow::anyhow!("Audit run {} not found", run_id))?;
-        
+
         let results = self.storage.get_audit_results(run_id)?;
         let summary = self.storage.get_audit_summary(run_id)?;
 
         let mut report = String::new();
-        
+
         // Header
         report.push_str(&self.generate_header(&run, &summary));
-        
+
         // Executive Summary
         report.push_str(&self.generate_executive_summary(&summary));
-        
+
         // Metrics
         report.push_str(&self.generate_metrics(&summary));
-        
+
         // Model Results
         report.push_str(&self.generate_model_breakdown(&results));
-        
+
         // Prompt Results
         report.push_str(&self.generate_prompt_results(&results));
-        
+
         // Competitor Analysis
         report.push_str(&self.generate_competitor_analysis(&results));
-        
+
         // Citations
         report.push_str(&self.generate_citations(&results));
-        
+
         // Content Gaps
         report.push_str(&self.generate_content_gaps(&results));
-        
+
         // Raw Evidence Appendix
         if include_full_responses {
             report.push_str(&self.generate_raw_appendix(&results));
         }
-        
+
         // Footer
         report.push_str(&self.generate_footer(&run));
-        
+
         Ok(report)
     }
 
     fn generate_header(&self, run: &AuditRun, _summary: &AuditSummary) -> String {
-        format!(r#"# LLMention Evidence Report
+        format!(
+            r#"# LLMention Evidence Report
 
 ## {project_name}
 
@@ -90,8 +93,9 @@ impl ReportGenerator {
 
     fn generate_executive_summary(&self, summary: &AuditSummary) -> String {
         let visibility_score = summary.visibility_score();
-        
-        format!(r#"## Executive Summary
+
+        format!(
+            r#"## Executive Summary
 
 This report measures how often AI models mention, cite, and recommend **{name}** across a configured set of prompts and model samples.
 
@@ -121,7 +125,8 @@ This report measures how often AI models mention, cite, and recommend **{name}**
     }
 
     fn generate_metrics(&self, summary: &AuditSummary) -> String {
-        format!(r#"## Detailed Metrics
+        format!(
+            r#"## Detailed Metrics
 
 ### Mention Rate
 Percentage of responses where **{name}** was explicitly mentioned.
@@ -155,16 +160,27 @@ Percentage of responses where the project was actively recommended (not merely m
         output.push_str("|-------|---------|----------|------|-------------------|\n");
 
         // Group by provider
-        let mut by_provider: std::collections::HashMap<String, Vec<&AuditResult>> = std::collections::HashMap::new();
+        let mut by_provider: std::collections::HashMap<String, Vec<&AuditResult>> =
+            std::collections::HashMap::new();
         for r in results {
             by_provider.entry(r.provider.clone()).or_default().push(r);
         }
 
         for (provider, provider_results) in by_provider {
             let total = provider_results.len();
-            let mentions = provider_results.iter().filter(|r| r.mentioned_project).count();
-            let recommendations = provider_results.iter().filter(|r| r.recommended_project).count();
-            let rate = if total > 0 { mentions as f64 / total as f64 * 100.0 } else { 0.0 };
+            let mentions = provider_results
+                .iter()
+                .filter(|r| r.mentioned_project)
+                .count();
+            let recommendations = provider_results
+                .iter()
+                .filter(|r| r.recommended_project)
+                .count();
+            let rate = if total > 0 {
+                mentions as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            };
 
             output.push_str(&format!(
                 "| {} | {} | {} | {:.1}% | {} |\n",
@@ -193,7 +209,10 @@ Percentage of responses where the project was actively recommended (not merely m
         }
 
         if results.len() > 50 {
-            output.push_str(&format!("\n*... and {} more results*\n", results.len() - 50));
+            output.push_str(&format!(
+                "\n*... and {} more results*\n",
+                results.len() - 50
+            ));
         }
 
         output.push('\n');
@@ -214,20 +233,22 @@ Percentage of responses where the project was actively recommended (not merely m
         output.push_str("|------------|-----------------|---------------|\n");
 
         for competitor in competitors {
-            let count = results.iter()
-                .filter(|r| r.response_text.to_lowercase().contains(&competitor.to_lowercase()))
+            let count = results
+                .iter()
+                .filter(|r| {
+                    r.response_text
+                        .to_lowercase()
+                        .contains(&competitor.to_lowercase())
+                })
                 .count();
-            
-            let rate = if !results.is_empty() { 
-                count as f64 / results.len() as f64 * 100.0 
-            } else { 
-                0.0 
+
+            let rate = if !results.is_empty() {
+                count as f64 / results.len() as f64 * 100.0
+            } else {
+                0.0
             };
 
-            output.push_str(&format!(
-                "| {} | {} | {:.1}% |\n",
-                competitor, count, rate
-            ));
+            output.push_str(&format!("| {} | {} | {:.1}% |\n", competitor, count, rate));
         }
 
         output.push('\n');
@@ -261,7 +282,10 @@ Percentage of responses where the project was actively recommended (not merely m
             }
 
             if all_citations.len() > 20 {
-                output.push_str(&format!("\n*... and {} more citations*\n", all_citations.len() - 20));
+                output.push_str(&format!(
+                    "\n*... and {} more citations*\n",
+                    all_citations.len() - 20
+                ));
             }
         }
 
@@ -273,9 +297,8 @@ Percentage of responses where the project was actively recommended (not merely m
         let mut output = String::from("## Content Gaps & Recommendations\n\n");
 
         // Identify gaps
-        let not_mentioned: Vec<&AuditResult> = results.iter()
-            .filter(|r| !r.mentioned_project)
-            .collect();
+        let not_mentioned: Vec<&AuditResult> =
+            results.iter().filter(|r| !r.mentioned_project).collect();
 
         if !not_mentioned.is_empty() {
             output.push_str(&format!(
@@ -288,7 +311,8 @@ Percentage of responses where the project was actively recommended (not merely m
             output.push_str("- Adding an FAQ section to your website\n\n");
         }
 
-        let not_recommended: Vec<&AuditResult> = results.iter()
+        let not_recommended: Vec<&AuditResult> = results
+            .iter()
             .filter(|r| r.mentioned_project && !r.recommended_project)
             .collect();
 
@@ -306,8 +330,12 @@ Percentage of responses where the project was actively recommended (not merely m
         output.push_str("### Suggested Content Assets\n\n");
         output.push_str("Based on this audit, consider creating:\n\n");
         output.push_str("1. **Comparison Page** — Compare your project with top alternatives\n");
-        output.push_str("2. **Use Case Documentation** — Clear examples of when to use the project\n");
-        output.push_str("3. **FAQ Page** — Answer common questions about features and alternatives\n");
+        output.push_str(
+            "2. **Use Case Documentation** — Clear examples of when to use the project\n",
+        );
+        output.push_str(
+            "3. **FAQ Page** — Answer common questions about features and alternatives\n",
+        );
         output.push_str("4. **Getting Started Guide** — Step-by-step setup instructions\n");
         output.push_str("5. **llms.txt** — Help AI models understand your project\n\n");
 
@@ -344,7 +372,8 @@ Percentage of responses where the project was actively recommended (not merely m
     }
 
     fn generate_footer(&self, run: &AuditRun) -> String {
-        format!(r#"---
+        format!(
+            r#"---
 
 ## Methodology
 
@@ -370,7 +399,11 @@ _Generated by [LLMention](https://github.com/wiramahendra/llMention) — local-f
 "#,
             samples = run.samples_per_prompt,
             temp = run.temperature,
-            stored = if run.summary_json.is_some() { "Yes" } else { "No" },
+            stored = if run.summary_json.is_some() {
+                "Yes"
+            } else {
+                "No"
+            },
             timestamp = Utc::now().format("%Y-%m-%d %H:%M UTC"),
         )
     }
@@ -429,9 +462,18 @@ mod tests {
         let storage = AuditStorage::open(&std::path::PathBuf::from(":memory:")).unwrap();
         let generator = ReportGenerator::new(project, storage);
 
-        assert_eq!(generator.assess_visibility(10.0), "⚠️ Critical — No visibility detected");
-        assert_eq!(generator.assess_visibility(50.0), "→ Moderate — Room for improvement");
-        assert_eq!(generator.assess_visibility(90.0), "✓ Excellent — Strong visibility");
+        assert_eq!(
+            generator.assess_visibility(10.0),
+            "⚠️ Critical — No visibility detected"
+        );
+        assert_eq!(
+            generator.assess_visibility(50.0),
+            "→ Moderate — Room for improvement"
+        );
+        assert_eq!(
+            generator.assess_visibility(90.0),
+            "✓ Excellent — Strong visibility"
+        );
     }
 
     #[test]
