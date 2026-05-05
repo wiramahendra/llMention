@@ -25,9 +25,13 @@ pub fn print_summary(summary: &TrackSummary, prev_rate: Option<f64>) {
         Some(prev) if summary.total_queries > 0 => {
             let delta = rate - prev;
             if delta > 2.0 {
-                format!("  (↑ {:.0}pp vs last run)", delta).green().to_string()
+                format!("  (↑ {:.0}pp vs last run)", delta)
+                    .green()
+                    .to_string()
             } else if delta < -2.0 {
-                format!("  (↓ {:.0}pp vs last run)", delta.abs()).red().to_string()
+                format!("  (↓ {:.0}pp vs last run)", delta.abs())
+                    .red()
+                    .to_string()
             } else {
                 format!("  (→ flat vs last run)").dimmed().to_string()
             }
@@ -91,7 +95,11 @@ fn print_results_table(results: &[MentionResult]) {
             Cell::new(&r.model).fg(Color::Cyan),
             Cell::new(truncate(&r.prompt, 44)),
             bool_cell(r.mentioned, "Yes", "No"),
-            if r.cited { Cell::new("Yes").fg(Color::Green) } else { Cell::new("—").fg(Color::DarkGrey) },
+            if r.cited {
+                Cell::new("Yes").fg(Color::Green)
+            } else {
+                Cell::new("—").fg(Color::DarkGrey)
+            },
             position_cell(&r.position),
             sentiment_cell(&r.sentiment),
         ]);
@@ -102,56 +110,124 @@ fn print_results_table(results: &[MentionResult]) {
 fn print_geo_tips(summary: &TrackSummary) {
     let rate = summary.mention_rate();
     let total = summary.total_queries;
-    let citation_rate = if total == 0 { 0.0 } else { summary.citation_count as f64 / total as f64 * 100.0 };
+    let citation_rate = if total == 0 {
+        0.0
+    } else {
+        summary.citation_count as f64 / total as f64 * 100.0
+    };
 
     println!("  {}", "Actionable GEO Tips:".bold());
 
     // Visibility level
     if rate == 0.0 {
-        tip("red", "Not found in any response. Publish a dedicated product page that");
-        tip("red", "  answers 'what is X', 'how X works', and 'X vs alternatives'.");
-        tip("red", "  Use the exact brand name in H1 and the first sentence.");
+        tip(
+            "red",
+            "Not found in any response. Publish a dedicated product page that",
+        );
+        tip(
+            "red",
+            "  answers 'what is X', 'how X works', and 'X vs alternatives'.",
+        );
+        tip(
+            "red",
+            "  Use the exact brand name in H1 and the first sentence.",
+        );
     } else if rate < 30.0 {
-        tip("yellow", "Low visibility. Add a short, factual 'entity definition' paragraph");
-        tip("yellow", "  at the top of your README/docs — LLMs extract these as summaries.");
-        tip("yellow", "  Keep it: '<Brand> is a <category> that <does X> for <audience>.'");
+        tip(
+            "yellow",
+            "Low visibility. Add a short, factual 'entity definition' paragraph",
+        );
+        tip(
+            "yellow",
+            "  at the top of your README/docs — LLMs extract these as summaries.",
+        );
+        tip(
+            "yellow",
+            "  Keep it: '<Brand> is a <category> that <does X> for <audience>.'",
+        );
     } else if rate < 60.0 {
-        tip("yellow", "Moderate visibility. Lead every major doc section with the direct");
-        tip("yellow", "  answer (inverted-pyramid). Publish explicit comparison pages");
-        tip("yellow", "  (e.g. 'MyTool vs Competitor') — they rank well in LLM citations.");
+        tip(
+            "yellow",
+            "Moderate visibility. Lead every major doc section with the direct",
+        );
+        tip(
+            "yellow",
+            "  answer (inverted-pyramid). Publish explicit comparison pages",
+        );
+        tip(
+            "yellow",
+            "  (e.g. 'MyTool vs Competitor') — they rank well in LLM citations.",
+        );
     } else {
-        tip("green", "Strong visibility. Focus on citation quality: add authoritative");
-        tip("green", "  links, structured data, and clear versioned changelogs so models");
-        tip("green", "  can surface your latest release with confidence.");
+        tip(
+            "green",
+            "Strong visibility. Focus on citation quality: add authoritative",
+        );
+        tip(
+            "green",
+            "  links, structured data, and clear versioned changelogs so models",
+        );
+        tip(
+            "green",
+            "  can surface your latest release with confidence.",
+        );
     }
 
     // Citation gap
     if citation_rate == 0.0 && rate > 0.0 {
         println!();
-        tip("yellow", "No direct link citations found. Ensure your domain appears as a");
-        tip("yellow", "  plain URL in key pages (e.g. 'Install from https://yourdomain.io')");
-        tip("yellow", "  and submit your site to relevant directories and package registries.");
+        tip(
+            "yellow",
+            "No direct link citations found. Ensure your domain appears as a",
+        );
+        tip(
+            "yellow",
+            "  plain URL in key pages (e.g. 'Install from https://yourdomain.io')",
+        );
+        tip(
+            "yellow",
+            "  and submit your site to relevant directories and package registries.",
+        );
     }
 
     // Position quality
-    let bottom_heavy = summary.results.iter()
+    let bottom_heavy = summary
+        .results
+        .iter()
         .filter(|r| r.mentioned && matches!(r.position, Position::Bottom))
         .count();
     if summary.mention_count > 0 && bottom_heavy * 2 > summary.mention_count {
         println!();
-        tip("yellow", "Brand appears mostly at the bottom of responses. Add structured");
-        tip("yellow", "  feature tables and a quick comparison chart to your front page —");
-        tip("yellow", "  LLMs tend to cite content that appears early in their training.");
+        tip(
+            "yellow",
+            "Brand appears mostly at the bottom of responses. Add structured",
+        );
+        tip(
+            "yellow",
+            "  feature tables and a quick comparison chart to your front page —",
+        );
+        tip(
+            "yellow",
+            "  LLMs tend to cite content that appears early in their training.",
+        );
     }
 
     // Sentiment gap
-    let negative = summary.results.iter()
+    let negative = summary
+        .results
+        .iter()
         .filter(|r| r.mentioned && matches!(r.sentiment, Sentiment::Negative))
         .count();
     if negative > summary.mention_count / 3 && negative > 0 {
         println!();
-        tip("red", "Some mentions carry negative context. Review which prompts trigger");
-        tip("red", "  negative responses and publish clear docs addressing those concerns");
+        tip(
+            "red",
+            "Some mentions carry negative context. Review which prompts trigger",
+        );
+        tip(
+            "red",
+            "  negative responses and publish clear docs addressing those concerns",
+        );
         tip("red", "  (e.g. stability, maintenance status, licensing).");
     }
 }
@@ -212,9 +288,13 @@ pub fn print_trend_report(domain: &str, results: &[MentionResult], days: u32) {
         let c = mr.iter().filter(|r| r.cited).count();
         let r = m as f64 / q as f64;
         let rate_str = format!("{:.0}%", r * 100.0);
-        let rate_cell = if r >= 0.6 { Cell::new(rate_str).fg(Color::Green) }
-            else if r >= 0.3 { Cell::new(rate_str).fg(Color::Yellow) }
-            else { Cell::new(rate_str).fg(Color::Red) };
+        let rate_cell = if r >= 0.6 {
+            Cell::new(rate_str).fg(Color::Green)
+        } else if r >= 0.3 {
+            Cell::new(rate_str).fg(Color::Yellow)
+        } else {
+            Cell::new(rate_str).fg(Color::Red)
+        };
         table.add_row(vec![
             Cell::new(model).fg(Color::Cyan),
             Cell::new(q),
@@ -271,7 +351,11 @@ pub fn print_optimization_plan(plan: &OptimizationPlan, dry_run: bool) {
         "  {}  {}{}",
         "Optimization Plan".bold(),
         plan.domain.cyan().bold(),
-        if dry_run { "  [dry-run]".yellow().to_string() } else { String::new() }
+        if dry_run {
+            "  [dry-run]".yellow().to_string()
+        } else {
+            String::new()
+        }
     );
     println!("{}", "═".repeat(64).cyan());
     println!();
@@ -298,7 +382,13 @@ pub fn print_optimization_plan(plan: &OptimizationPlan, dry_run: bool) {
         let avg_cit = format!("{:.0}%", plan.avg_citability());
         println!(
             "  Projected citability  {}  ({} on optimized topics)",
-            if lift >= 40.0 { avg_cit.green().bold() } else if lift >= 20.0 { avg_cit.yellow().bold() } else { avg_cit.red().bold() },
+            if lift >= 40.0 {
+                avg_cit.green().bold()
+            } else if lift >= 20.0 {
+                avg_cit.yellow().bold()
+            } else {
+                avg_cit.red().bold()
+            },
             lift_str.green().bold()
         );
     }
@@ -350,7 +440,11 @@ pub fn print_optimization_plan(plan: &OptimizationPlan, dry_run: bool) {
         println!("  {}", "Next steps:".bold());
         let files: Vec<&str> = plan.sections.iter().map(|s| s.file_name.as_str()).collect();
         let file_list = files.join(" ");
-        println!("  {}  Review content:  {}", "→".cyan(), format!("cat {}", files.first().copied().unwrap_or("geo/*.md")).dimmed());
+        println!(
+            "  {}  Review content:  {}",
+            "→".cyan(),
+            format!("cat {}", files.first().copied().unwrap_or("geo/*.md")).dimmed()
+        );
         println!(
             "  {}  Commit:          {}",
             "→".cyan(),
@@ -363,11 +457,7 @@ pub fn print_optimization_plan(plan: &OptimizationPlan, dry_run: bool) {
         println!(
             "  {}  Re-audit:        {}",
             "→".cyan(),
-            format!(
-                "llmention audit {} --niche \"{}\"",
-                plan.domain, plan.niche
-            )
-            .dimmed()
+            format!("llmention audit {} --niche \"{}\"", plan.domain, plan.niche).dimmed()
         );
     }
     println!();
@@ -376,7 +466,11 @@ pub fn print_optimization_plan(plan: &OptimizationPlan, dry_run: bool) {
 pub fn print_generate_results(results: &[GenerateResult], user_prompt: &str) {
     println!();
     println!("{}", "━".repeat(64).dimmed());
-    println!("  {}  {}", "Generated Content".bold(), format!("\"{}\"", user_prompt).cyan());
+    println!(
+        "  {}  {}",
+        "Generated Content".bold(),
+        format!("\"{}\"", user_prompt).cyan()
+    );
     println!("{}", "━".repeat(64).dimmed());
 
     for result in results {
@@ -527,13 +621,23 @@ pub fn render_share_markdown(domain: &str, results: &[MentionResult], days: u32)
     let total = results.len();
     let mentioned = results.iter().filter(|r| r.mentioned).count();
     let cited = results.iter().filter(|r| r.cited).count();
-    let rate = if total == 0 { 0.0 } else { mentioned as f64 / total as f64 * 100.0 };
+    let rate = if total == 0 {
+        0.0
+    } else {
+        mentioned as f64 / total as f64 * 100.0
+    };
 
     let now = chrono::Utc::now().format("%Y-%m-%d");
     let mut out = format!("# LLMention Visibility Report — {}\n\n", domain);
-    out.push_str(&format!("Generated: {}  |  Period: last {} days\n\n", now, days));
+    out.push_str(&format!(
+        "Generated: {}  |  Period: last {} days\n\n",
+        now, days
+    ));
     out.push_str("## Summary\n\n");
-    out.push_str(&format!("- **Mention rate:** {:.0}% ({}/{})\n", rate, mentioned, total));
+    out.push_str(&format!(
+        "- **Mention rate:** {:.0}% ({}/{})\n",
+        rate, mentioned, total
+    ));
     out.push_str(&format!("- **Citations:** {}\n\n", cited));
 
     out.push_str("## Results\n\n");
@@ -561,7 +665,11 @@ pub fn render_share_json(domain: &str, results: &[MentionResult], days: u32) -> 
     let total = results.len();
     let mentioned = results.iter().filter(|r| r.mentioned).count();
     let cited = results.iter().filter(|r| r.cited).count();
-    let rate = if total == 0 { 0.0 } else { mentioned as f64 / total as f64 * 100.0 };
+    let rate = if total == 0 {
+        0.0
+    } else {
+        mentioned as f64 / total as f64 * 100.0
+    };
     let now = chrono::Utc::now().format("%Y-%m-%d");
 
     serde_json::json!({
@@ -597,7 +705,11 @@ pub fn print_results(
 ) {
     println!();
     println!("{}", "━".repeat(64).dimmed());
-    println!("  {}  {}", "Visibility Results:".bold(), domain.cyan().bold());
+    println!(
+        "  {}  {}",
+        "Visibility Results:".bold(),
+        domain.cyan().bold()
+    );
     println!("{}", "━".repeat(64).dimmed());
     println!();
 
@@ -658,11 +770,20 @@ pub fn print_results(
         println!("  {}  Lift since publish: {}", "→".cyan(), lift_cell);
 
         if delta > 2.0 {
-            println!("  {}  Mention rate improved — your published content is being cited.", "✓".green());
+            println!(
+                "  {}  Mention rate improved — your published content is being cited.",
+                "✓".green()
+            );
         } else if delta < -2.0 {
-            println!("  {}  Mention rate dropped. Re-run optimize and publish updated content.", "!".yellow());
+            println!(
+                "  {}  Mention rate dropped. Re-run optimize and publish updated content.",
+                "!".yellow()
+            );
         } else {
-            println!("  {}  No significant change yet. Models may not have been retrained.", "~".dimmed());
+            println!(
+                "  {}  No significant change yet. Models may not have been retrained.",
+                "~".dimmed()
+            );
             println!("       Wait a few more days and re-audit.");
         }
         println!();
@@ -687,7 +808,11 @@ fn csv_escape(s: &str) -> String {
 }
 
 fn bool_cell(val: bool, yes: &str, no: &str) -> Cell {
-    if val { Cell::new(yes).fg(Color::Green) } else { Cell::new(no).fg(Color::Red) }
+    if val {
+        Cell::new(yes).fg(Color::Green)
+    } else {
+        Cell::new(no).fg(Color::Red)
+    }
 }
 
 fn position_cell(p: &Position) -> Cell {
@@ -709,14 +834,18 @@ fn sentiment_cell(s: &Sentiment) -> Cell {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max - 1]) }
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..max - 1])
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use crate::types::{Position, Sentiment};
+    use chrono::Utc;
 
     fn make_result(mentioned: bool, cited: bool) -> MentionResult {
         MentionResult {
@@ -726,8 +855,16 @@ mod tests {
             timestamp: Utc::now(),
             mentioned,
             cited,
-            position: if mentioned { Position::Top } else { Position::NotMentioned },
-            sentiment: if mentioned { Sentiment::Positive } else { Sentiment::Unknown },
+            position: if mentioned {
+                Position::Top
+            } else {
+                Position::NotMentioned
+            },
+            sentiment: if mentioned {
+                Sentiment::Positive
+            } else {
+                Sentiment::Unknown
+            },
             snippet: None,
             raw_response: "test response".into(),
         }
