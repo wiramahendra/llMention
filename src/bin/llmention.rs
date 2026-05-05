@@ -9,7 +9,7 @@ use llmention::{
     audit_storage::{AuditStorage, NewGeneratedAsset, NewPrompt},
     cache::Cache,
     config::{Config, EXAMPLE_CONFIG},
-    content_generator::{ContentGenerator, GenerationReport},
+    content_generator::ContentGenerator,
     geo::{
         evaluator,
         generator::{self, GenerateOptions},
@@ -17,10 +17,10 @@ use llmention::{
     },
     marketplace::{builtin, registry},
     plugins,
-    project_config::{ProjectConfig, EXAMPLE_PROJECT_CONFIG},
+    project_config::ProjectConfig,
     prompt_discovery::PromptDiscovery,
     report,
-    report_generator::{self, generate_report_filename, write_report},
+    report_generator::generate_report_filename,
     scheduler,
     storage::Storage,
     tracker::{self, TrackOptions},
@@ -362,11 +362,11 @@ enum Commands {
         force: bool,
     },
     /// Manage and discover prompts (v0.2+)
-    #[command(subcommand)]
-    Prompts(PromptsCommand),
+    #[command(subcommand, name = "prompts2")]
+    Prompts2(Prompts2Command),
     /// Run evidence-first audits (v0.2+)
-    #[command(subcommand)]
-    Audit(AuditCommand),
+    #[command(subcommand, name = "audit2")]
+    Audit2(Audit2Command),
     /// Generate markdown report from audit results (v0.2+)
     ///
     /// Examples:
@@ -434,7 +434,7 @@ enum Commands {
 }
 
 #[derive(clap::Subcommand)]
-enum PromptsCommand {
+enum Prompts2Command {
     /// Discover prompts based on project configuration
     ///
     /// Examples:
@@ -453,7 +453,7 @@ enum PromptsCommand {
 }
 
 #[derive(clap::Subcommand)]
-enum AuditCommand {
+enum Audit2Command {
     /// Run a new audit with the evidence engine
     ///
     /// Examples:
@@ -1271,9 +1271,9 @@ async fn main() -> Result<()> {
             run_init2(name, website, category, yes, force)?;
         }
 
-        Commands::Prompts(prompt_cmd) => {
+        Commands::Prompts2(prompt_cmd) => {
             // Load project config
-            let (project, project_dir) = match ProjectConfig::find_and_load() {
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
                     println!("\n  {} No llmention.toml found. Run {} first.\n",
@@ -1293,16 +1293,16 @@ async fn main() -> Result<()> {
             let storage = AuditStorage::open(&storage_path)?;
 
             match prompt_cmd {
-                PromptsCommand::Discover { limit } => {
+                Prompts2Command::Discover { limit } => {
                     run_prompts_discover(&project, &storage, limit).await?;
                 }
-                PromptsCommand::List => {
+                Prompts2Command::List => {
                     run_prompts_list(&project, &storage)?;
                 }
             }
         }
 
-        Commands::Audit(audit_cmd) => {
+        Commands::Audit2(audit_cmd) => {
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
@@ -1324,13 +1324,13 @@ async fn main() -> Result<()> {
             let storage = AuditStorage::open(&storage_path)?;
 
             match audit_cmd {
-                AuditCommand::Run { samples, temperature, models, json } => {
+                Audit2Command::Run { samples, temperature, models, json } => {
                     run_audit_run(&project, &config, &storage, samples, temperature, models, json).await?;
                 }
-                AuditCommand::List { limit } => {
+                Audit2Command::List { limit } => {
                     run_audit_list(&project, &storage, limit)?;
                 }
-                AuditCommand::Show { id } => {
+                Audit2Command::Show { id } => {
                     run_audit_show(&storage, id)?;
                 }
             }
@@ -2367,12 +2367,8 @@ async fn run_report2(
         }
     };
 
-    // Generate report
-    let generator = llmention::report_generator::ReportGenerator::new(
-        project.clone(),
-        storage.clone()
-    );
-    let report = generator.generate_markdown_report(run_id, full)?;
+    // Generate report directly using storage methods
+    let report = generate_markdown_report(project, storage, run_id, full)?;
 
     // Write to file
     if !output.exists() {
@@ -2538,6 +2534,102 @@ async fn run_compare(
     }
 
     Ok(())
+}
+
+fn generate_markdown_report(
+    project: &ProjectConfig,
+    storage: &AuditStorage,
+    run_id: i64,
+    _full: bool,
+) -> Result<String> {
+    use chrono::Utc;
+    
+    let run = storage.get_audit_run(run_id)?
+        .ok_or_else(|| anyhow::anyhow!("Audit run {} not found", run_id))?;
+    
+    let results = storage.get_audit_results(run_id)?;
+    let summary = storage.get_audit_summary(run_id)?;
+
+    let mut report = String::new();
+    
+    // Header
+    report.push_str(&format!(r#"# LLMention Evidence Report
+
+## {}
+
+**Audit Run**: {}  
+**Generated**: {}  
+**Status**: {}
+
+---
+
+"#,
+        project.project.name,
+        run.id,
+        Utc::now().format("%Y-%m-%d %H:%M UTC"),
+        run.status,
+    ));
+
+    // Executive Summary
+    let visibility_score = summary.visibility_score();
+    report.push_str(&format!(r#"## Executive Summary
+
+| Metric | Value |
+|--------|-------|
+| Visibility Score | {:.1}/100 |
+| Mention Rate | {:.1}% ({}/{}) |
+| Citation Rate | {:.1}% |
+| Recommendation Rate | {:.1}% |
+| Total Queries | {} |
+
+**Models Tested**: {}
+
+"#,
+        visibility_score,
+        summary.mention_rate * 100.0,
+        summary.mention_count,
+        summary.total_queries,
+        summary.citation_rate * 100.0,
+        summary.recommendation_rate * 100.0,
+        summary.total_queries,
+        summary.models_used.join(", "),
+    ));
+
+    // Results table
+    report.push_str("## Results by Model\n\n");
+    report.push_str("| Model | Queries | Mentions | Rate |\n");
+    report.push_str("|-------|---------|----------|------|\n");
+
+    let mut by_provider: std::collections::HashMap<String, Vec<&llmention::audit_storage::AuditResult>> = std::collections::HashMap::new();
+    for r in &results {
+        by_provider.entry(r.provider.clone()).or_default().push(r);
+    }
+
+    for (provider, provider_results) in by_provider {
+        let total = provider_results.len();
+        let mentions = provider_results.iter().filter(|r| r.mentioned_project).count();
+        let rate = if total > 0 { mentions as f64 / total as f64 * 100.0 } else { 0.0 };
+        report.push_str(&format!("| {} | {} | {} | {:.1}% |\n", provider, total, mentions, rate));
+    }
+
+    report.push('\n');
+    
+    // Footer
+    report.push_str(&format!(r#"---
+
+**Methodology**: Results are based on {} sample(s) per prompt across configured models. AI model behavior is probabilistic and may vary between runs.
+
+**Report Generated**: {}
+
+---
+
+_Generated by [LLMention](https://github.com/wiramahendra/llMention) — local-first AI visibility tooling_
+"#,
+        run.samples_per_prompt,
+        Utc::now().format("%Y-%m-%d %H:%M UTC"),
+    ));
+
+    Ok(report)
 }
 
 async fn run_diagnose2(url: &str) -> Result<()> {
