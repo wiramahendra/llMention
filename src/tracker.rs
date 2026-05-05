@@ -22,22 +22,34 @@ use crate::{
 pub fn build_providers(config: &Config) -> Vec<Arc<dyn LlmProvider>> {
     let mut v: Vec<Arc<dyn LlmProvider>> = Vec::new();
     if let Some(c) = &config.providers.openai {
-        if c.enabled { v.push(Arc::new(OpenAiProvider::new(c.clone()))); }
+        if c.enabled {
+            v.push(Arc::new(OpenAiProvider::new(c.clone())));
+        }
     }
     if let Some(c) = &config.providers.anthropic {
-        if c.enabled { v.push(Arc::new(AnthropicProvider::new(c.clone()))); }
+        if c.enabled {
+            v.push(Arc::new(AnthropicProvider::new(c.clone())));
+        }
     }
     if let Some(c) = &config.providers.gemini {
-        if c.enabled { v.push(Arc::new(GeminiProvider::new(c.clone()))); }
+        if c.enabled {
+            v.push(Arc::new(GeminiProvider::new(c.clone())));
+        }
     }
     if let Some(c) = &config.providers.xai {
-        if c.enabled { v.push(Arc::new(XaiProvider::new(c.clone()))); }
+        if c.enabled {
+            v.push(Arc::new(XaiProvider::new(c.clone())));
+        }
     }
     if let Some(c) = &config.providers.perplexity {
-        if c.enabled { v.push(Arc::new(PerplexityProvider::new(c.clone()))); }
+        if c.enabled {
+            v.push(Arc::new(PerplexityProvider::new(c.clone())));
+        }
     }
     if let Some(c) = &config.providers.ollama {
-        if c.enabled { v.push(Arc::new(OllamaProvider::new(c.clone()))); }
+        if c.enabled {
+            v.push(Arc::new(OllamaProvider::new(c.clone())));
+        }
     }
     v
 }
@@ -51,7 +63,9 @@ pub fn build_providers_filtered(
         None => all,
         Some(f) => {
             let names: Vec<&str> = f.split(',').map(str::trim).collect();
-            all.into_iter().filter(|p| names.contains(&p.name())).collect()
+            all.into_iter()
+                .filter(|p| names.contains(&p.name()))
+                .collect()
         }
     }
 }
@@ -78,7 +92,12 @@ pub struct TrackOptions {
 
 impl Default for TrackOptions {
     fn default() -> Self {
-        Self { verbose: false, concurrency: 5, judge: None, quiet: false }
+        Self {
+            verbose: false,
+            concurrency: 5,
+            judge: None,
+            quiet: false,
+        }
     }
 }
 
@@ -106,8 +125,19 @@ pub async fn run_track(
                 let n = done.fetch_add(1, Ordering::SeqCst) + 1;
                 let parsed = parser::parse_response(domain, &cached);
                 if !opts.quiet {
-                    let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
-                    eprintln!("  {} [{:>3}/{}] [cached] [{}] {}", icon, n, total, model.cyan(), prompt.dimmed());
+                    let icon = if parsed.mentioned {
+                        "✓".green()
+                    } else {
+                        "–".dimmed()
+                    };
+                    eprintln!(
+                        "  {} [{:>3}/{}] [cached] [{}] {}",
+                        icon,
+                        n,
+                        total,
+                        model.cyan(),
+                        prompt.dimmed()
+                    );
                     if opts.verbose {
                         eprintln!("          {}", first_line(&cached).dimmed());
                     }
@@ -141,9 +171,21 @@ pub async fn run_track(
                 };
                 let n = done.fetch_add(1, Ordering::SeqCst) + 1;
                 if !opts.quiet {
-                    let icon = if parsed.mentioned { "✓".green() } else { "–".dimmed() };
+                    let icon = if parsed.mentioned {
+                        "✓".green()
+                    } else {
+                        "–".dimmed()
+                    };
                     let judge_tag = if judge_ref.is_some() { " [judge]" } else { "" };
-                    eprintln!("  {} [{:>3}/{}] [{}{}] {}", icon, n, total, model.cyan(), judge_tag.dimmed(), prompt.dimmed());
+                    eprintln!(
+                        "  {} [{:>3}/{}] [{}{}] {}",
+                        icon,
+                        n,
+                        total,
+                        model.cyan(),
+                        judge_tag.dimmed(),
+                        prompt.dimmed()
+                    );
                     if opts.verbose {
                         eprintln!("          {}", first_line(&response).dimmed());
                     }
@@ -153,7 +195,14 @@ pub async fn run_track(
             }
             Ok(Err(e)) => {
                 let n = done.fetch_add(1, Ordering::SeqCst) + 1;
-                eprintln!("  {} [{:>3}/{}] [{}] {}", "✗".red(), n, total, model.cyan(), e.to_string().yellow());
+                eprintln!(
+                    "  {} [{:>3}/{}] [{}] {}",
+                    "✗".red(),
+                    n,
+                    total,
+                    model.cyan(),
+                    e.to_string().yellow()
+                );
             }
             Err(e) => {
                 eprintln!("  {} [{}] task panicked: {}", "✗".red(), model.cyan(), e);
