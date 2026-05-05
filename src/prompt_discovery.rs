@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 use crate::project_config::{ProjectConfig, ProjectInfo};
 
 /// Categories of prompts for different intent stages
