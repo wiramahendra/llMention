@@ -5,8 +5,11 @@ use std::path::PathBuf;
 
 use llmention::{
     agent::optimizer::{self, OptimizeOptions},
+    audit_engine::{AuditEngine, AuditOptions, PromptInput, build_providers_for_project},
+    audit_storage::{AuditStorage, NewGeneratedAsset, NewPrompt},
     cache::Cache,
     config::{Config, EXAMPLE_CONFIG},
+    content_generator::{ContentGenerator, GenerationReport},
     geo::{
         evaluator,
         generator::{self, GenerateOptions},
@@ -14,7 +17,10 @@ use llmention::{
     },
     marketplace::{builtin, registry},
     plugins,
+    project_config::{ProjectConfig, EXAMPLE_PROJECT_CONFIG},
+    prompt_discovery::PromptDiscovery,
     report,
+    report_generator::{self, generate_report_filename, write_report},
     scheduler,
     storage::Storage,
     tracker::{self, TrackOptions},
@@ -330,6 +336,161 @@ enum Commands {
         /// Show all past checkpoints, not just the most recent
         #[arg(long)]
         all: bool,
+    },
+    /// Evidence-first project initialization (v0.2+)
+    ///
+    /// Creates llmention.toml in the current directory for project-specific configuration.
+    ///
+    /// Examples:
+    ///   llmention init2
+    ///   llmention init2 --name "MyProject" --website "https://example.com"
+    Init2 {
+        /// Project name
+        #[arg(short, long)]
+        name: Option<String>,
+        /// Project website
+        #[arg(short, long)]
+        website: Option<String>,
+        /// Project category/niche
+        #[arg(short, long)]
+        category: Option<String>,
+        /// Skip interactive prompts
+        #[arg(long)]
+        yes: bool,
+        /// Overwrite existing config
+        #[arg(long)]
+        force: bool,
+    },
+    /// Manage and discover prompts (v0.2+)
+    #[command(subcommand)]
+    Prompts(PromptsCommand),
+    /// Run evidence-first audits (v0.2+)
+    #[command(subcommand)]
+    Audit(AuditCommand),
+    /// Generate markdown report from audit results (v0.2+)
+    ///
+    /// Examples:
+    ///   llmention report2
+    ///   llmention report2 --run 42 --format markdown
+    ///   llmention report2 --output ./reports/
+    Report2 {
+        /// Audit run ID (latest if not specified)
+        #[arg(short, long)]
+        run: Option<i64>,
+        /// Output format
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+        /// Output directory
+        #[arg(short, long, default_value = "reports")]
+        output: PathBuf,
+        /// Include full raw responses
+        #[arg(long)]
+        full: bool,
+        /// Force overwrite existing report
+        #[arg(long)]
+        force: bool,
+    },
+    /// Generate content assets from audit gaps (v0.2+)
+    ///
+    /// Examples:
+    ///   llmention generate2
+    ///   llmention generate2 --from-audit 42
+    ///   llmention generate2 --output ./content/
+    Generate2 {
+        /// Source audit run ID or "latest"
+        #[arg(short, long, default_value = "latest")]
+        from_audit: String,
+        /// Output directory
+        #[arg(short, long, default_value = "generated")]
+        output: PathBuf,
+        /// Force overwrite existing files
+        #[arg(long)]
+        force: bool,
+    },
+    /// Compare two audit runs (v0.2+)
+    ///
+    /// Examples:
+    ///   llmention compare --before 10 --after 20
+    ///   llmention compare --before 10 --after 20 --format json
+    Compare {
+        /// Before audit run ID
+        #[arg(long)]
+        before: i64,
+        /// After audit run ID
+        #[arg(long)]
+        after: i64,
+        /// Output format
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+    },
+    /// Diagnose URL crawlability and AI readiness (v0.2+)
+    ///
+    /// Examples:
+    ///   llmention diagnose https://example.com
+    Diagnose2 {
+        /// URL to diagnose
+        url: String,
+    },
+}
+
+#[derive(clap::Subcommand)]
+enum PromptsCommand {
+    /// Discover prompts based on project configuration
+    ///
+    /// Examples:
+    ///   llmention prompts discover
+    ///   llmention prompts discover --limit 20
+    Discover {
+        /// Limit number of prompts to generate
+        #[arg(short, long)]
+        limit: Option<usize>,
+    },
+    /// List stored prompts
+    ///
+    /// Examples:
+    ///   llmention prompts list
+    List,
+}
+
+#[derive(clap::Subcommand)]
+enum AuditCommand {
+    /// Run a new audit with the evidence engine
+    ///
+    /// Examples:
+    ///   llmention audit run
+    ///   llmention audit run --provider mock --samples 3
+    ///   llmention audit run --models ollama:llama3.2 --temperature 0.5
+    Run {
+        /// Number of samples per prompt
+        #[arg(short, long)]
+        samples: Option<usize>,
+        /// Temperature for LLM queries
+        #[arg(short, long)]
+        temperature: Option<f32>,
+        /// Specific provider/models to use (e.g., mock, ollama:llama3.2)
+        #[arg(short, long)]
+        models: Option<String>,
+        /// JSON output
+        #[arg(long)]
+        json: bool,
+    },
+    /// List previous audit runs
+    ///
+    /// Examples:
+    ///   llmention audit list
+    ///   llmention audit list --limit 10
+    List {
+        /// Limit number of results
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+    },
+    /// Show details of a specific audit run
+    ///
+    /// Examples:
+    ///   llmention audit show 42
+    Show {
+        /// Audit run ID
+        id: i64,
     },
 }
 
@@ -1103,6 +1264,137 @@ async fn main() -> Result<()> {
         Commands::Doctor => run_doctor(&config, &base_dir).await?,
 
         Commands::Quickstart => run_quickstart()?,
+
+        // ── New Evidence-First Commands (v0.2+) ─────────────────────────────────
+
+        Commands::Init2 { name, website, category, yes, force } => {
+            run_init2(name, website, category, yes, force)?;
+        }
+
+        Commands::Prompts(prompt_cmd) => {
+            // Load project config
+            let (project, project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init2".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
+            // Open audit storage
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            match prompt_cmd {
+                PromptsCommand::Discover { limit } => {
+                    run_prompts_discover(&project, &storage, limit).await?;
+                }
+                PromptsCommand::List => {
+                    run_prompts_list(&project, &storage)?;
+                }
+            }
+        }
+
+        Commands::Audit(audit_cmd) => {
+            // Load project config
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init2".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
+            // Open audit storage
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            match audit_cmd {
+                AuditCommand::Run { samples, temperature, models, json } => {
+                    run_audit_run(&project, &config, &storage, samples, temperature, models, json).await?;
+                }
+                AuditCommand::List { limit } => {
+                    run_audit_list(&project, &storage, limit)?;
+                }
+                AuditCommand::Show { id } => {
+                    run_audit_show(&storage, id)?;
+                }
+            }
+        }
+
+        Commands::Report2 { run, format, output, full, force } => {
+            // Load project config
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init2".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
+            // Open audit storage
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            run_report2(&project, &storage, run, &format, output, full, force).await?;
+        }
+
+        Commands::Generate2 { from_audit, output, force } => {
+            // Load project config
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init2".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
+            // Open audit storage
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            run_generate2(&project, &storage, &from_audit, output, force)?;
+        }
+
+        Commands::Compare { before, after, format } => {
+            // Open audit storage
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            run_compare(&storage, before, after, &format).await?;
+        }
+
+        Commands::Diagnose2 { url } => {
+            run_diagnose2(&url).await?;
+        }
     }
 
     Ok(())
