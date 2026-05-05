@@ -10,8 +10,8 @@ use tokio::sync::Semaphore;
 use crate::{
     audit_storage::{AuditStorage, AuditSummary, NewAuditResult, NewPrompt},
     config::Config,
-    parser::{self, ParseResult},
-    project_config::{ProjectConfig, ProjectProvidersConfig},
+    parser,
+    project_config::ProjectProvidersConfig,
     providers::LlmProvider,
     types::{Position, Sentiment},
 };
@@ -40,21 +40,33 @@ impl Default for AuditOptions {
     }
 }
 
+/// A single audit query result (before storage)
+#[derive(Debug, Clone)]
+struct QueryResult {
+    prompt_id: Option<i64>,
+    provider: String,
+    model: String,
+    sample_index: usize,
+    response_text: String,
+    mentioned_project: bool,
+    recommended_project: bool,
+    mention_position: Position,
+    sentiment: Sentiment,
+    citations: Vec<(String, bool)>, // (url, is_project)
+}
+
 /// The core audit engine
 pub struct AuditEngine {
-    storage: Arc<AuditStorage>,
     providers: Vec<Arc<dyn LlmProvider>>,
     options: AuditOptions,
 }
 
 impl AuditEngine {
     pub fn new(
-        storage: Arc<AuditStorage>,
         providers: Vec<Arc<dyn LlmProvider>>,
         options: AuditOptions,
     ) -> Self {
         Self {
-            storage,
             providers,
             options,
         }
@@ -65,13 +77,14 @@ impl AuditEngine {
         &self,
         project_id: &str,
         prompts: &[PromptInput],
+        storage: &AuditStorage,
     ) -> Result<AuditRunResult> {
-        // Create audit run record
+        // Create audit run record (synchronous)
         let provider_models: Vec<String> = self.providers.iter()
             .map(|p| p.name().to_string())
             .collect();
         
-        let run_id = self.storage.create_audit_run(
+        let run_id = storage.create_audit_run(
             project_id,
             &provider_models,
             self.options.samples_per_prompt,
@@ -90,18 +103,13 @@ impl AuditEngine {
             );
         }
 
-        let total_queries = prompts.len() * self.options.samples_per_prompt * self.providers.len();
-        let completed = Arc::new(AtomicUsize::new(0));
-        let sem = Arc::new(Semaphore::new(self.options.concurrency));
-
-        let mut handles: Vec<tokio::task::JoinHandle<Result<()>>> = Vec::new();
-
+        // Store prompts first (synchronous)
+        let mut stored_prompt_ids: Vec<Option<i64>> = Vec::new();
         for prompt in prompts {
-            // Store prompt if it has an ID (existing) or create new
             let prompt_id = if let Some(existing_id) = prompt.id {
                 Some(existing_id)
             } else {
-                Some(self.storage.insert_prompt(project_id, &NewPrompt {
+                Some(storage.insert_prompt(project_id, &NewPrompt {
                     text: &prompt.text,
                     intent: prompt.intent.as_deref(),
                     funnel_stage: prompt.funnel_stage.as_deref(),
@@ -110,18 +118,30 @@ impl AuditEngine {
                     created_by: Some("audit_engine"),
                 })?)
             };
+            stored_prompt_ids.push(prompt_id);
+        }
 
-            for provider in &self.providers {
+        // Run all queries asynchronously and collect results
+        let total_queries = prompts.len() * self.options.samples_per_prompt * self.providers.len();
+        let completed = Arc::new(AtomicUsize::new(0));
+        let sem = Arc::new(Semaphore::new(self.options.concurrency));
+
+        let mut all_results: Vec<QueryResult> = Vec::new();
+
+        for (prompt_idx, prompt) in prompts.iter().enumerate() {
+            let prompt_id = stored_prompt_ids[prompt_idx];
+
+            for (provider_idx, provider) in self.providers.iter().enumerate() {
                 for sample_idx in 0..self.options.samples_per_prompt {
                     let provider = Arc::clone(provider);
                     let prompt_text = prompt.text.clone();
-                    let prompt_id = prompt_id;
                     let sem = Arc::clone(&sem);
                     let completed = Arc::clone(&completed);
-                    let storage = Arc::clone(&self.storage);
                     let opts = self.options.clone();
+                    let project_id_owned = project_id.to_string();
 
-                    let handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
+                    // Execute query asynchronously
+                    let result = async move {
                         let _permit = sem.acquire().await.unwrap();
 
                         // Query the provider
@@ -134,55 +154,18 @@ impl AuditEngine {
                                     provider.name().cyan(),
                                     e
                                 );
-                                return Ok(());
+                                return None;
                             }
                         };
 
                         // Parse the response
-                        let parse_result = parser::parse_response(project_id, &response);
+                        let parse_result = parser::parse_response(&project_id_owned, &response);
 
                         // Detect recommendation
-                        let recommended = Self::detect_recommendation(&response, project_id);
+                        let recommended = Self::detect_recommendation(&response, &project_id_owned);
 
-                        // Build raw response JSON
-                        let raw_json = if opts.store_raw_responses {
-                            serde_json::json!({
-                                "provider": provider.name(),
-                                "prompt": prompt_text,
-                                "sample_index": sample_idx,
-                                "response": &response,
-                                "parsed": {
-                                    "mentioned": parse_result.mentioned,
-                                    "cited": parse_result.cited,
-                                    "position": format!("{:?}", parse_result.position),
-                                    "sentiment": format!("{:?}", parse_result.sentiment),
-                                },
-                                "timestamp": Utc::now().to_rfc3339(),
-                            }).to_string()
-                        } else {
-                            String::new()
-                        };
-
-                        // Store result
-                        let result_id = storage.insert_audit_result(&NewAuditResult {
-                            audit_run_id: run_id,
-                            prompt_id,
-                            provider: provider.name(),
-                            model: provider.name(), // Could extract model name separately
-                            sample_index: sample_idx,
-                            response_text: &response,
-                            raw_response_json: &raw_json,
-                            mentioned_project: parse_result.mentioned,
-                            recommended_project: recommended,
-                            mention_position: parse_result.position.clone(),
-                            sentiment: parse_result.sentiment.clone(),
-                        })?;
-
-                        // Extract and store citations
-                        let citations = Self::extract_citations(&response, project_id);
-                        for (url, is_project) in citations {
-                            storage.insert_citation(result_id, &url, is_project)?;
-                        }
+                        // Extract citations
+                        let citations = Self::extract_citations(&response, &project_id_owned);
 
                         // Progress
                         let n = completed.fetch_add(1, Ordering::SeqCst) + 1;
@@ -202,24 +185,65 @@ impl AuditEngine {
                             }
                         }
 
-                        Ok(())
-                    });
+                        Some(QueryResult {
+                            prompt_id,
+                            provider: provider.name().to_string(),
+                            model: provider.name().to_string(),
+                            sample_index: sample_idx,
+                            response_text: response,
+                            mentioned_project: parse_result.mentioned,
+                            recommended_project: recommended,
+                            mention_position: parse_result.position,
+                            sentiment: parse_result.sentiment,
+                            citations,
+                        })
+                    }.await;
 
-                    handles.push(handle);
+                    if let Some(r) = result {
+                        all_results.push(r);
+                    }
                 }
             }
         }
 
-        // Wait for all queries to complete
-        for handle in handles {
-            if let Err(e) = handle.await {
-                eprintln!("  {} Task panicked: {}", "✗".red(), e);
+        // Store all results synchronously
+        for result in &all_results {
+            let raw_json = if self.options.store_raw_responses {
+                serde_json::json!({
+                    "provider": result.provider,
+                    "prompt_id": result.prompt_id,
+                    "sample_index": result.sample_index,
+                    "mentioned": result.mentioned_project,
+                    "recommended": result.recommended_project,
+                    "timestamp": Utc::now().to_rfc3339(),
+                }).to_string()
+            } else {
+                String::new()
+            };
+
+            let result_id = storage.insert_audit_result(&NewAuditResult {
+                audit_run_id: run_id,
+                prompt_id: result.prompt_id,
+                provider: &result.provider,
+                model: &result.model,
+                sample_index: result.sample_index,
+                response_text: &result.response_text,
+                raw_response_json: &raw_json,
+                mentioned_project: result.mentioned_project,
+                recommended_project: result.recommended_project,
+                mention_position: result.mention_position.clone(),
+                sentiment: result.sentiment.clone(),
+            })?;
+
+            // Store citations
+            for (url, is_project) in &result.citations {
+                storage.insert_citation(result_id, url, *is_project)?;
             }
         }
 
         // Generate summary
-        let summary = self.storage.get_audit_summary(run_id)?;
-        self.storage.complete_audit_run(run_id, &summary)?;
+        let summary = storage.get_audit_summary(run_id)?;
+        storage.complete_audit_run(run_id, &summary)?;
 
         if !self.options.quiet {
             println!(
@@ -295,9 +319,10 @@ impl AuditEngine {
             let project_domain = project.to_lowercase();
             
             let is_project = domain == project_domain 
-                || domain.ends_with(&format!(".{}.{}", 
+                || domain.ends_with(&format!(".{}.{}.{}", 
                     project_domain.split('.').next().unwrap_or(""),
-                    project_domain.split('.').nth(1).unwrap_or("")
+                    project_domain.split('.').nth(1).unwrap_or(""),
+                    project_domain.split('.').nth(2).unwrap_or("")
                 ));
             
             citations.push((url, is_project));
@@ -526,8 +551,6 @@ pub fn build_providers_for_project(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers::mock::{MockProvider, MockProviderBuilder};
-    use tempfile::TempDir;
 
     #[test]
     fn test_detect_recommendation() {
