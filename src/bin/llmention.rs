@@ -101,33 +101,29 @@ enum Commands {
         #[arg(long)]
         judge: bool,
     },
-    /// Quick audit using 12 smart default prompts — no file needed
+    /// Run evidence-based visibility audits
+    ///
+    /// Execute multi-sample audits across configured models and store
+    /// comprehensive results including raw responses, citations, and metrics.
     ///
     /// Examples:
-    ///   llmention audit myproject.com
-    ///   llmention audit myproject.com --niche "Rust CLI tool" --competitor ripgrep
-    ///   llmention audit myproject.com --models ollama   # fully local, free
-    Audit {
-        /// Domain or brand to audit
-        domain: String,
-        /// Product niche for smarter prompt generation (e.g. "Rust CLI tool")
-        #[arg(long)]
-        niche: Option<String>,
-        /// Main competitor for comparison prompts
-        #[arg(long)]
-        competitor: Option<String>,
-        /// Re-evaluate each response with a local LLM for higher-accuracy parsing
-        #[arg(long)]
-        judge: bool,
-    },
-    /// Show mention history and trends from the local database
+    ///   llmention audit run                        # Run audit with stored prompts
+    ///   llmention audit run --models mock          # Test with mock provider
+    ///   llmention audit run --samples 5            # More samples per prompt
+    ///   llmention audit list                       # List previous audits
+    ///   llmention audit show 42                    # Show audit details
+    ///   llmention audit compare --before 1 --after 2  # Compare two runs
+    #[command(subcommand)]
+    Audit(AuditCommand),
+    /// Show mention history and trends from the local database (legacy)
+    ///
+    /// For the new evidence-based reports, use: llmention report
     ///
     /// Examples:
-    ///   llmention report myproject.com
-    ///   llmention report myproject.com --days 30
-    ///   llmention report myproject.com --export csv > results.csv
-    ///   llmention report myproject.com --export markdown > report.md
-    Report {
+    ///   llmention report-legacy myproject.com
+    ///   llmention report-legacy myproject.com --days 30
+    #[command(name = "report-legacy")]
+    ReportLegacy {
         /// Domain or brand
         domain: String,
         /// Number of past days to include
@@ -171,30 +167,29 @@ enum Commands {
         #[arg(long)]
         plugin: Option<String>,
     },
-    /// Generate GEO-optimized markdown content for a target query
+    /// Generate GEO-optimized markdown content for a target query (legacy)
+    ///
+    /// For content generation from audit gaps, use: llmention generate
     ///
     /// Examples:
-    ///   llmention generate "best deterministic runtime for edge AI agents" --about "myproject.io is a ..."
-    ///   llmention generate "alternatives to ROS 2" --niche "edge robotics" --evaluate
-    ///   llmention generate "what is myproject" --about "..." --output content.md
-    ///   llmention generate "..." --about "..." --models anthropic --evaluate
-    ///   llmention generate "best rust cli tool" --plugin rust-crate --about "..."
-    Generate {
+    ///   llmention generate-legacy "best tool" --about "..."
+    #[command(name = "generate-legacy")]
+    GenerateLegacy {
         /// Target query or topic to generate content for
         prompt: String,
-        /// Short description of your project (e.g. "myproject.io is a fast Rust CLI for GEO")
+        /// Short description of your project
         #[arg(long, short)]
         about: Option<String>,
-        /// Optional niche/context for more targeted content (e.g. "edge robotics", "Rust CLI tools")
+        /// Optional niche/context for more targeted content
         #[arg(long, short)]
         niche: Option<String>,
-        /// Save generated content to a file instead of printing to stdout
+        /// Save generated content to a file
         #[arg(long, short)]
         output: Option<PathBuf>,
-        /// After generating, estimate before/after visibility lift with LLM evaluation
+        /// Evaluate visibility lift
         #[arg(long, short)]
         evaluate: bool,
-        /// Apply a named plugin template (installed or builtin)
+        /// Apply a named plugin template
         #[arg(long)]
         plugin: Option<String>,
     },
@@ -233,16 +228,18 @@ enum Commands {
         #[command(subcommand)]
         action: Option<PluginAction>,
     },
-    /// Browse and install community prompt templates
+    /// Manage prompts and templates
+    ///
+    /// Discover project-specific prompts or browse community templates.
     ///
     /// Examples:
-    ///   llmention prompts list
-    ///   llmention prompts search rust
-    ///   llmention prompts install rust-crate
-    Prompts {
-        #[command(subcommand)]
-        action: PromptMarketAction,
-    },
+    ///   llmention prompts discover              # Generate prompts from project config
+    ///   llmention prompts list                  # List stored prompts
+    ///   llmention prompts templates list        # Browse community templates
+    ///   llmention prompts templates search rust
+    ///   llmention prompts templates install rust-crate
+    #[command(subcommand)]
+    Prompts(PromptsCommand),
     /// Export a shareable visibility report
     ///
     /// Examples:
@@ -285,11 +282,31 @@ enum Commands {
     Doctor,
     /// Guided beginner flow — prints the recommended steps to get started
     Quickstart,
-    /// Interactive setup wizard — configure providers and run your first audit
+    /// Initialize a new LLMention project
+    ///
+    /// Creates llmention.toml in the current directory for project-specific
+    /// configuration including prompts, competitors, and audit settings.
     ///
     /// Examples:
     ///   llmention init
-    Init,
+    ///   llmention init --name "MyProject" --website "https://example.com" --yes
+    Init {
+        /// Project name
+        #[arg(short, long)]
+        name: Option<String>,
+        /// Project website
+        #[arg(short, long)]
+        website: Option<String>,
+        /// Project category/niche
+        #[arg(short, long)]
+        category: Option<String>,
+        /// Skip interactive prompts
+        #[arg(long)]
+        yes: bool,
+        /// Overwrite existing config
+        #[arg(long)]
+        force: bool,
+    },
     /// Set up automatic background auditing (launchd on macOS, prints cron line on Linux)
     ///
     /// Examples:
@@ -337,14 +354,9 @@ enum Commands {
         #[arg(long)]
         all: bool,
     },
-    /// Evidence-first project initialization (v0.2+)
-    ///
-    /// Creates llmention.toml in the current directory for project-specific configuration.
-    ///
-    /// Examples:
-    ///   llmention init2
-    ///   llmention init2 --name "MyProject" --website "https://example.com"
-    Init2 {
+    /// Initialize project (deprecated alias - use 'init')
+    #[command(name = "init2", hide = true)]
+    Init2Deprecated {
         /// Project name
         #[arg(short, long)]
         name: Option<String>,
@@ -361,19 +373,15 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
-    /// Manage and discover prompts (v0.2+)
-    #[command(subcommand, name = "prompts2")]
-    Prompts2(Prompts2Command),
-    /// Run evidence-first audits (v0.2+)
-    #[command(subcommand, name = "audit2")]
-    Audit2(Audit2Command),
-    /// Generate markdown report from audit results (v0.2+)
-    ///
-    /// Examples:
-    ///   llmention report2
-    ///   llmention report2 --run 42 --format markdown
-    ///   llmention report2 --output ./reports/
-    Report2 {
+    /// Manage prompts (deprecated alias - use 'prompts')
+    #[command(name = "prompts2", hide = true)]
+    Prompts2Deprecated(Prompts2Command),
+    /// Run audits (deprecated alias - use 'audit')
+    #[command(name = "audit2", hide = true)]
+    Audit2Deprecated(Audit2Command),
+    /// Generate report (deprecated alias - use 'report')
+    #[command(name = "report2", hide = true)]
+    Report2Deprecated {
         /// Audit run ID (latest if not specified)
         #[arg(short, long)]
         run: Option<i64>,
@@ -390,13 +398,43 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
-    /// Generate content assets from audit gaps (v0.2+)
+    /// Generate evidence-based markdown report from audit results
+    ///
+    /// Creates a comprehensive report with metrics, citations, competitor analysis,
+    /// and content gaps from your audit runs.
     ///
     /// Examples:
-    ///   llmention generate2
-    ///   llmention generate2 --from-audit 42
-    ///   llmention generate2 --output ./content/
-    Generate2 {
+    ///   llmention report                           # Report from latest audit
+    ///   llmention report --run 42                  # Report from specific audit
+    ///   llmention report --output ./reports/       # Custom output directory
+    ///   llmention report --full                    # Include full raw responses
+    Report {
+        /// Audit run ID (latest if not specified)
+        #[arg(short, long)]
+        run: Option<i64>,
+        /// Output format
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+        /// Output directory
+        #[arg(short, long, default_value = "reports")]
+        output: PathBuf,
+        /// Include full raw responses
+        #[arg(long)]
+        full: bool,
+        /// Force overwrite existing report
+        #[arg(long)]
+        force: bool,
+    },
+    /// Generate content assets from audit gaps
+    ///
+    /// Analyzes your audit results to identify visibility gaps and generates
+    /// markdown content assets to fill those gaps.
+    ///
+    /// Examples:
+    ///   llmention generate                          # Generate from latest audit
+    ///   llmention generate --from-audit 42          # Generate from specific run
+    ///   llmention generate --output ./content/      # Custom output directory
+    Generate {
         /// Source audit run ID or "latest"
         #[arg(short, long, default_value = "latest")]
         from_audit: String,
@@ -407,27 +445,33 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
-    /// Compare two audit runs (v0.2+)
-    ///
-    /// Examples:
-    ///   llmention compare --before 10 --after 20
-    ///   llmention compare --before 10 --after 20 --format json
-    Compare {
-        /// Before audit run ID
+    /// Generate content assets from audit gaps (deprecated - use 'generate')
+    #[command(name = "generate2", hide = true)]
+    Generate2Deprecated {
+        /// Source audit run ID or "latest"
+        #[arg(short, long, default_value = "latest")]
+        from_audit: String,
+        /// Output directory
+        #[arg(short, long, default_value = "generated")]
+        output: PathBuf,
+        /// Force overwrite existing files
         #[arg(long)]
-        before: i64,
-        /// After audit run ID
-        #[arg(long)]
-        after: i64,
-        /// Output format
-        #[arg(short, long, default_value = "markdown")]
-        format: String,
+        force: bool,
     },
-    /// Diagnose URL crawlability and AI readiness (v0.2+)
+    /// Diagnose URL crawlability and AI readiness
+    ///
+    /// Checks basic crawlability signals that help AI models discover
+    /// and understand your content.
     ///
     /// Examples:
     ///   llmention diagnose https://example.com
-    Diagnose2 {
+    Diagnose {
+        /// URL to diagnose
+        url: String,
+    },
+    /// Diagnose URL (deprecated alias - use 'diagnose')
+    #[command(name = "diagnose2", hide = true)]
+    Diagnose2Deprecated {
         /// URL to diagnose
         url: String,
     },
@@ -532,7 +576,40 @@ enum PluginAction {
 }
 
 #[derive(clap::Subcommand)]
-enum PromptMarketAction {
+enum PromptsCommand {
+    /// Discover prompts based on project configuration
+    ///
+    /// Generates prompts from your project category, audience, and competitors.
+    ///
+    /// Examples:
+    ///   llmention prompts discover
+    ///   llmention prompts discover --limit 20
+    Discover {
+        /// Limit number of prompts to generate
+        #[arg(short, long)]
+        limit: Option<usize>,
+    },
+    /// List stored prompts
+    ///
+    /// Shows all prompts discovered for your project with metadata.
+    ///
+    /// Examples:
+    ///   llmention prompts list
+    List,
+    /// Browse and install community prompt templates
+    ///
+    /// Access community-contributed prompt templates.
+    ///
+    /// Examples:
+    ///   llmention prompts templates list
+    ///   llmention prompts templates search rust
+    ///   llmention prompts templates install rust-crate
+    #[command(subcommand)]
+    Templates(PromptTemplatesCommand),
+}
+
+#[derive(clap::Subcommand)]
+enum PromptTemplatesCommand {
     /// List all available community templates
     List,
     /// Search templates by keyword, tag, or name
@@ -544,6 +621,67 @@ enum PromptMarketAction {
     Install {
         /// Template name (e.g. rust-crate)
         name: String,
+    },
+}
+
+#[derive(clap::Subcommand)]
+enum AuditCommand {
+    /// Run a new audit with the evidence engine
+    ///
+    /// Execute multi-sample audits across configured models.
+    ///
+    /// Examples:
+    ///   llmention audit run
+    ///   llmention audit run --models mock --samples 3
+    ///   llmention audit run --temperature 0.5
+    Run {
+        /// Number of samples per prompt
+        #[arg(short, long)]
+        samples: Option<usize>,
+        /// Temperature for LLM queries
+        #[arg(short, long)]
+        temperature: Option<f32>,
+        /// Specific provider/models to use
+        #[arg(short, long)]
+        models: Option<String>,
+        /// JSON output
+        #[arg(long)]
+        json: bool,
+    },
+    /// List previous audit runs
+    ///
+    /// Examples:
+    ///   llmention audit list
+    ///   llmention audit list --limit 10
+    List {
+        /// Limit results
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+    },
+    /// Show details of a specific audit run
+    ///
+    /// Examples:
+    ///   llmention audit show 42
+    Show {
+        /// Audit run ID
+        id: i64,
+    },
+    /// Compare two audit runs
+    ///
+    /// Shows before/after metrics and visibility changes.
+    ///
+    /// Examples:
+    ///   llmention audit compare --before 10 --after 20
+    Compare {
+        /// Before audit run ID
+        #[arg(long)]
+        before: i64,
+        /// After audit run ID
+        #[arg(long)]
+        after: i64,
+        /// Output format
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
     },
 }
 
@@ -1265,20 +1403,25 @@ async fn main() -> Result<()> {
 
         Commands::Quickstart => run_quickstart()?,
 
-        // ── New Evidence-First Commands (v0.2+) ─────────────────────────────────
+        // ── Evidence-First Workflow (Primary Commands) ───────────────────────────
 
-        Commands::Init2 { name, website, category, yes, force } => {
+        Commands::Init { name, website, category, yes, force } => {
             run_init2(name, website, category, yes, force)?;
         }
 
-        Commands::Prompts2(prompt_cmd) => {
+        Commands::Init2Deprecated { name, website, category, yes, force } => {
+            eprintln!("{} 'init2' is deprecated. Use 'llmention init' instead.", "Warning:".yellow());
+            run_init2(name, website, category, yes, force)?;
+        }
+
+        Commands::Prompts(prompt_cmd) => {
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
                     println!("\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
-                        "llmention init2".cyan()
+                        "llmention init".cyan()
                     );
                     std::process::exit(1);
                 }
@@ -1293,6 +1436,40 @@ async fn main() -> Result<()> {
             let storage = AuditStorage::open(&storage_path)?;
 
             match prompt_cmd {
+                PromptsCommand::Discover { limit } => {
+                    run_prompts_discover(&project, &storage, limit).await?;
+                }
+                PromptsCommand::List => {
+                    run_prompts_list(&project, &storage)?;
+                }
+                PromptsCommand::Templates(template_cmd) => {
+                    run_prompts_templates(&base_dir, template_cmd).await?;
+                }
+            }
+        }
+
+        Commands::Prompts2Deprecated(prompt_cmd) => {
+            eprintln!("{} 'prompts2' is deprecated. Use 'llmention prompts' instead.", "Warning:".yellow());
+            // Load project config
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            match prompt_cmd {
                 Prompts2Command::Discover { limit } => {
                     run_prompts_discover(&project, &storage, limit).await?;
                 }
@@ -1302,14 +1479,14 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Audit2(audit_cmd) => {
+        Commands::Audit(audit_cmd) => {
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
                     println!("\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
-                        "llmention init2".cyan()
+                        "llmention init".cyan()
                     );
                     std::process::exit(1);
                 }
@@ -1320,6 +1497,43 @@ async fn main() -> Result<()> {
             };
 
             // Open audit storage
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            match audit_cmd {
+                AuditCommand::Run { samples, temperature, models, json } => {
+                    run_audit_run(&project, &config, &storage, samples, temperature, models, json).await?;
+                }
+                AuditCommand::List { limit } => {
+                    run_audit_list(&project, &storage, limit)?;
+                }
+                AuditCommand::Show { id } => {
+                    run_audit_show(&storage, id)?;
+                }
+                AuditCommand::Compare { before, after, format } => {
+                    run_compare(&storage, before, after, &format).await?;
+                }
+            }
+        }
+
+        Commands::Audit2Deprecated(audit_cmd) => {
+            eprintln!("{} 'audit2' is deprecated. Use 'llmention audit' instead.", "Warning:".yellow());
+            // Load project config
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
             let storage_path = base_dir.join("evidence.db");
             let storage = AuditStorage::open(&storage_path)?;
 
@@ -1336,14 +1550,14 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Report2 { run, format, output, full, force } => {
+        Commands::Report { run, format, output, full, force } => {
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
                     println!("\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
-                        "llmention init2".cyan()
+                        "llmention init".cyan()
                     );
                     std::process::exit(1);
                 }
@@ -1360,14 +1574,49 @@ async fn main() -> Result<()> {
             run_report2(&project, &storage, run, &format, output, full, force).await?;
         }
 
-        Commands::Generate2 { from_audit, output, force } => {
+        Commands::Report2Deprecated { run, format, output, full, force } => {
+            eprintln!("{} 'report2' is deprecated. Use 'llmention report' instead.", "Warning:".yellow());
             // Load project config
             let (project, _project_dir) = match ProjectConfig::find_and_load() {
                 Ok(Some((p, d))) => (p, d),
                 Ok(None) => {
                     println!("\n  {} No llmention.toml found. Run {} first.\n",
                         "!".yellow(),
-                        "llmention init2".cyan()
+                        "llmention init".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
+            let storage_path = base_dir.join("evidence.db");
+            let storage = AuditStorage::open(&storage_path)?;
+
+            run_report2(&project, &storage, run, &format, output, full, force).await?;
+        }
+
+        Commands::ReportLegacy { domain, days, export } => {
+            let results = storage.query_domain(&domain, days)?;
+            match export {
+                Some(ExportFormat::Csv) => print!("{}", report::export_csv(&results)),
+                Some(ExportFormat::Markdown) => {
+                    print!("{}", report::export_markdown(&results, &domain))
+                }
+                None => report::print_trend_report(&domain, &results, days),
+            }
+        }
+
+        Commands::Generate { from_audit, output, force } => {
+            // Load project config
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init".cyan()
                     );
                     std::process::exit(1);
                 }
@@ -1384,15 +1633,105 @@ async fn main() -> Result<()> {
             run_generate2(&project, &storage, &from_audit, output, force)?;
         }
 
-        Commands::Compare { before, after, format } => {
-            // Open audit storage
+        Commands::Generate2Deprecated { from_audit, output, force } => {
+            eprintln!("{} 'generate2' is deprecated. Use 'llmention generate' instead.", "Warning:".yellow());
+            // Load project config
+            let (project, _project_dir) = match ProjectConfig::find_and_load() {
+                Ok(Some((p, d))) => (p, d),
+                Ok(None) => {
+                    println!("\n  {} No llmention.toml found. Run {} first.\n",
+                        "!".yellow(),
+                        "llmention init".cyan()
+                    );
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("  {} Failed to load project config: {}", "✗".red(), e);
+                    std::process::exit(1);
+                }
+            };
+
             let storage_path = base_dir.join("evidence.db");
             let storage = AuditStorage::open(&storage_path)?;
 
-            run_compare(&storage, before, after, &format).await?;
+            run_generate2(&project, &storage, &from_audit, output, force)?;
         }
 
-        Commands::Diagnose2 { url } => {
+        Commands::GenerateLegacy { prompt, about, niche, output, evaluate, plugin } => {
+            let providers = tracker::build_providers_filtered(&config, cli.models.as_deref());
+            if providers.is_empty() {
+                no_providers_error();
+            }
+
+            let about_str = about.as_deref().unwrap_or("").to_string();
+            let niche_str = niche.as_deref().unwrap_or("general").to_string();
+            let system_prompt_override = resolve_generate_template(plugin.as_deref(), &base_dir);
+
+            println!(
+                "\n  {} {}\n  {} {}{}\n",
+                "Generating content for:".bold(),
+                format!("\"{}\"", prompt).cyan(),
+                "Using models:".dimmed(),
+                providers.iter().map(|p| p.name()).collect::<Vec<_>>().join(", ").cyan(),
+                plugin.as_deref().map(|p| format!("  [plugin: {}]", p)).unwrap_or_default()
+            );
+
+            let opts = GenerateOptions {
+                prompt: prompt.clone(),
+                about: about_str.clone(),
+                niche: niche_str,
+                verbose: cli.verbose,
+                system_prompt_override,
+            };
+
+            let results = generator::generate(&opts, &providers).await?;
+
+            if results.is_empty() {
+                bail!("No providers returned a response. Check your config or try --models.");
+            }
+
+            match &output {
+                Some(path) => {
+                    let primary = &results[0];
+                    std::fs::write(path, &primary.content)?;
+                    println!(
+                        "  {} Saved to {}\n",
+                        "✓".green().bold(),
+                        path.display().to_string().cyan()
+                    );
+                }
+                None => {
+                    report::print_generate_results(&results, &prompt);
+                }
+            }
+
+            if evaluate {
+                println!("  {} Running before/after evaluation…\n", "→".cyan());
+
+                let domain_hint = extract_domain_hint(&about_str);
+                let before_stored = domain_hint.as_deref().and_then(|d| {
+                    storage.query_domain(d, 7).ok().and_then(|results| {
+                        if results.is_empty() {
+                            None
+                        } else {
+                            let mentioned = results.iter().filter(|r| r.mentioned).count();
+                            Some(mentioned as f64 / results.len() as f64 * 100.0)
+                        }
+                    })
+                });
+
+                let primary_content = &results[0].content;
+                let delta = evaluator::evaluate_content(&prompt, primary_content, &providers).await?;
+                report::print_eval_delta(&delta, before_stored);
+            }
+        }
+
+        Commands::Diagnose { url } => {
+            run_diagnose2(&url).await?;
+        }
+
+        Commands::Diagnose2Deprecated { url } => {
+            eprintln!("{} 'diagnose2' is deprecated. Use 'llmention diagnose' instead.", "Warning:".yellow());
             run_diagnose2(&url).await?;
         }
     }
