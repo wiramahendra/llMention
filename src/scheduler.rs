@@ -38,7 +38,12 @@ pub fn install_launchd(
     let interval_secs = interval.hours() as u64 * 3600;
 
     let niche_args = niche
-        .map(|n| format!("\n                <string>--niche</string>\n                <string>{}</string>", n))
+        .map(|n| {
+            format!(
+                "\n                <string>--niche</string>\n                <string>{}</string>",
+                n
+            )
+        })
         .unwrap_or_default();
 
     let plist = format!(
