@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] - 2026-05-06
 
+### Release Summary
+This is the first public release candidate for LLMention v0.3.0, featuring a completely normalized CLI with clean command names and an evidence-based workflow. The CLI has been stabilized with production-ready commands for project initialization, prompt discovery, multi-sample auditing, report generation, and content gap analysis.
+
 ### Changed
 - Promoted v0.2 evidence engine workflow to primary CLI commands
 - `init2` → `init`: Initialize project with llmention.toml
@@ -34,6 +37,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mock provider for testing without API keys
 - Comprehensive documentation in `docs/v0.2-evidence-engine-guide.md`
 - Release validation script at `scripts/validate-release.sh`
+
+### Known Limitations
+- **AI visibility results are probabilistic**: Scores represent likelihood based on configured prompts and samples, not guarantees of future model behavior
+- **Results depend on prompt sets**: Visibility scores are only as comprehensive as your configured prompt sets
+- **Real improvement takes time**: Publishing content is step one; model retraining and indexing happens on varying schedules (days to months)
+- **Citation behavior varies significantly**: Different providers (OpenAI, Anthropic, Ollama) exhibit different citation patterns
+- **Mock provider is for testing only**: The mock provider validates workflows but does not measure actual visibility
+- **Cloud provider warnings**: Commands using real providers should warn that prompts will be sent to external APIs
+
+### Migration Notes
+If you were using the temporary `*2` commands from v0.2.x:
+- `init2` → `init`
+- `prompts2` → `prompts`
+- `audit2` → `audit run`
+- `report2` → `report`
+- `generate2` → `generate`
+- `diagnose2` → `diagnose`
+
+The old `*2` commands will continue to work with a deprecation warning.
+
+### Release Checklist
+- [x] Version updated to 0.3.0 in Cargo.toml
+- [x] CHANGELOG.md updated
+- [x] README.md updated with new commands
+- [x] Documentation in docs/v0.2-evidence-engine-guide.md
+- [x] Code formatting checked (`cargo fmt`)
+- [x] Unit tests pass (`cargo test`)
+- [x] Binary builds successfully (`cargo build --release`)
+- [ ] Git tag created: `git tag v0.3.0`
+- [ ] Git push with tags: `git push --tags`
 
 ## [0.2.0] - 2026-05-05
 
