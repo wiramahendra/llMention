@@ -1,0 +1,45 @@
+[project]
+name = "LLMention"
+website = "https://llmention.dev"
+category = "local-first AI visibility and GEO tool"
+description = "A local-first CLI workbench that helps indie builders and open-source maintainers audit whether AI models mention, cite, or recommend their projects."
+audience = [
+    "indie hackers",
+    "solo founders",
+    "open-source maintainers",
+    "developer tool builders"
+]
+
+[competitors]
+names = [
+    "Promptmonitor",
+    "Profound",
+    "Otterly",
+    "Scrunch",
+    "The Prompting Company"
+]
+
+[keywords]
+topics = [
+    "AI visibility",
+    "Generative Engine Optimization",
+    "GEO",
+    "ChatGPT mentions",
+    "AI search monitoring",
+    "local-first GEO",
+    "open-source GEO",
+    "AI citation tracking"
+]
+
+[providers]
+default = "mock"
+models = [
+    "mock",
+    "ollama:llama3.2",
+    "openai:gpt-4o-mini"
+]
+
+[audit]
+samples_per_prompt = 3
+temperature = 0.2
+store_raw_responses = true
