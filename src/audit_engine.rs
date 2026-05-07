@@ -9,7 +9,7 @@ use tokio::sync::Semaphore;
 
 use crate::{
     audit_storage::{AuditStorage, AuditSummary, NewAuditResult, NewPrompt},
-    config::Config,
+    config::{Config, ProviderConfig},
     parser,
     project_config::ProjectProvidersConfig,
     providers::LlmProvider,
@@ -393,6 +393,27 @@ pub struct AuditRunResult {
     pub summary: AuditSummary,
 }
 
+fn cloud_provider_config(
+    configured: Option<&ProviderConfig>,
+    env_var: &str,
+    default_model: &str,
+) -> Option<ProviderConfig> {
+    if let Some(config) = configured {
+        return Some(config.clone());
+    }
+
+    std::env::var(env_var)
+        .ok()
+        .filter(|key| !key.trim().is_empty())
+        .map(|api_key| ProviderConfig {
+            api_key,
+            model: default_model.to_string(),
+            enabled: true,
+            temperature: 0.0,
+            timeout_secs: 30,
+        })
+}
+
 /// Build providers from project config and global config
 pub fn build_providers_for_project(
     project_config: &ProjectProvidersConfig,
@@ -426,8 +447,11 @@ pub fn build_providers_for_project(
                     }
                 }
                 "openai" => {
-                    if let Some(ref c) = global_config.providers.openai {
-                        let mut config = c.clone();
+                    if let Some(mut config) = cloud_provider_config(
+                        global_config.providers.openai.as_ref(),
+                        "OPENAI_API_KEY",
+                        "gpt-4o-mini",
+                    ) {
                         if let Some(m) = model_name {
                             config.model = m.to_string();
                         }
@@ -436,8 +460,11 @@ pub fn build_providers_for_project(
                     }
                 }
                 "anthropic" => {
-                    if let Some(ref c) = global_config.providers.anthropic {
-                        let mut config = c.clone();
+                    if let Some(mut config) = cloud_provider_config(
+                        global_config.providers.anthropic.as_ref(),
+                        "ANTHROPIC_API_KEY",
+                        "claude-3-5-haiku-20241022",
+                    ) {
                         if let Some(m) = model_name {
                             config.model = m.to_string();
                         }
@@ -445,9 +472,12 @@ pub fn build_providers_for_project(
                         providers.push(Arc::new(AnthropicProvider::new(config)));
                     }
                 }
-                "xai" => {
-                    if let Some(ref c) = global_config.providers.xai {
-                        let mut config = c.clone();
+                "xai" | "grok" => {
+                    if let Some(mut config) = cloud_provider_config(
+                        global_config.providers.xai.as_ref(),
+                        "XAI_API_KEY",
+                        "grok-2-latest",
+                    ) {
                         if let Some(m) = model_name {
                             config.model = m.to_string();
                         }
@@ -455,9 +485,12 @@ pub fn build_providers_for_project(
                         providers.push(Arc::new(XaiProvider::new(config)));
                     }
                 }
-                "gemini" => {
-                    if let Some(ref c) = global_config.providers.gemini {
-                        let mut config = c.clone();
+                "gemini" | "google" => {
+                    if let Some(mut config) = cloud_provider_config(
+                        global_config.providers.gemini.as_ref(),
+                        "GEMINI_API_KEY",
+                        "gemini-2.0-flash",
+                    ) {
                         if let Some(m) = model_name {
                             config.model = m.to_string();
                         }
@@ -466,8 +499,11 @@ pub fn build_providers_for_project(
                     }
                 }
                 "perplexity" => {
-                    if let Some(ref c) = global_config.providers.perplexity {
-                        let mut config = c.clone();
+                    if let Some(mut config) = cloud_provider_config(
+                        global_config.providers.perplexity.as_ref(),
+                        "PERPLEXITY_API_KEY",
+                        "sonar",
+                    ) {
                         if let Some(m) = model_name {
                             config.model = m.to_string();
                         }
@@ -500,27 +536,58 @@ pub fn build_providers_for_project(
                         }
                     }
                     "openai" => {
-                        if let Some(ref c) = global_config.providers.openai {
-                            let mut config = c.clone();
+                        if let Some(mut config) = cloud_provider_config(
+                            global_config.providers.openai.as_ref(),
+                            "OPENAI_API_KEY",
+                            "gpt-4o-mini",
+                        ) {
                             config.model = model_name.to_string();
                             config.enabled = true;
                             providers.push(Arc::new(OpenAiProvider::new(config)));
                         }
                     }
                     "anthropic" => {
-                        if let Some(ref c) = global_config.providers.anthropic {
-                            let mut config = c.clone();
+                        if let Some(mut config) = cloud_provider_config(
+                            global_config.providers.anthropic.as_ref(),
+                            "ANTHROPIC_API_KEY",
+                            "claude-3-5-haiku-20241022",
+                        ) {
                             config.model = model_name.to_string();
                             config.enabled = true;
                             providers.push(Arc::new(AnthropicProvider::new(config)));
                         }
                     }
-                    "xai" => {
-                        if let Some(ref c) = global_config.providers.xai {
-                            let mut config = c.clone();
+                    "xai" | "grok" => {
+                        if let Some(mut config) = cloud_provider_config(
+                            global_config.providers.xai.as_ref(),
+                            "XAI_API_KEY",
+                            "grok-2-latest",
+                        ) {
                             config.model = model_name.to_string();
                             config.enabled = true;
                             providers.push(Arc::new(XaiProvider::new(config)));
+                        }
+                    }
+                    "gemini" | "google" => {
+                        if let Some(mut config) = cloud_provider_config(
+                            global_config.providers.gemini.as_ref(),
+                            "GEMINI_API_KEY",
+                            "gemini-2.0-flash",
+                        ) {
+                            config.model = model_name.to_string();
+                            config.enabled = true;
+                            providers.push(Arc::new(GeminiProvider::new(config)));
+                        }
+                    }
+                    "perplexity" => {
+                        if let Some(mut config) = cloud_provider_config(
+                            global_config.providers.perplexity.as_ref(),
+                            "PERPLEXITY_API_KEY",
+                            "sonar",
+                        ) {
+                            config.model = model_name.to_string();
+                            config.enabled = true;
+                            providers.push(Arc::new(PerplexityProvider::new(config)));
                         }
                     }
                     _ => {}
