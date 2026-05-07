@@ -212,6 +212,19 @@ fn detect_sentiment(domain_base: &str, response_lower: &str) -> Sentiment {
     }
 }
 
+fn extract_snippet(domain_base: &str, response: &str) -> Option<String> {
+    let lower = response.to_lowercase();
+    let idx = lower.find(domain_base)?;
+    let start = idx.saturating_sub(80);
+    let end = (idx + domain_base.len() + 120).min(response.len());
+    let raw = response[start..end].trim();
+    Some(if raw.len() > 200 {
+        format!("{}…", &raw[..199])
+    } else {
+        raw.to_string()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,17 +320,4 @@ mod tests {
         let r = parse_response("myproject.com", "MYPROJECT.COM is well known.");
         assert!(r.mentioned);
     }
-}
-
-fn extract_snippet(domain_base: &str, response: &str) -> Option<String> {
-    let lower = response.to_lowercase();
-    let idx = lower.find(domain_base)?;
-    let start = idx.saturating_sub(80);
-    let end = (idx + domain_base.len() + 120).min(response.len());
-    let raw = response[start..end].trim();
-    Some(if raw.len() > 200 {
-        format!("{}…", &raw[..199])
-    } else {
-        raw.to_string()
-    })
 }
