@@ -233,7 +233,7 @@ impl PromptDiscovery {
         ));
 
         prompts.push(DiscoveredPrompt::new(
-            format!("{}", project_name),
+            project_name.to_string(),
             PromptCategory::SolutionAware,
             info,
         ));
