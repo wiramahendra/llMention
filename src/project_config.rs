@@ -18,7 +18,7 @@ pub struct ProjectConfig {
     pub audit: AuditConfig,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ProjectInfo {
     pub name: String,
     #[serde(default)]
@@ -29,18 +29,6 @@ pub struct ProjectInfo {
     pub description: String,
     #[serde(default)]
     pub audience: Vec<String>,
-}
-
-impl Default for ProjectInfo {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            website: String::new(),
-            category: String::new(),
-            description: String::new(),
-            audience: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
