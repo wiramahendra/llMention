@@ -2,7 +2,7 @@
 # LLMention Release Validation Script
 # Run this before releasing a new version
 
-set -e
+set -euo pipefail
 
 echo "=========================================="
 echo "LLMention Release Validation"
@@ -40,7 +40,7 @@ fi
 
 echo ""
 echo "3. Building release binary..."
-cargo build --release 2>&1 | tail -5
+cargo build --release
 echo -e "${GREEN}✓ Release binary built${NC}"
 echo "   Binary size: $(ls -lh target/release/llmention | awk '{print $5}')"
 
