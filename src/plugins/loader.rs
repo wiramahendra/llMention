@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::manifest::PluginManifest;
 
@@ -21,7 +21,7 @@ impl Plugin {
 }
 
 /// Scan `<config_dir>/plugins/` and return all valid plugins.
-pub fn discover_plugins(config_dir: &PathBuf) -> Vec<Plugin> {
+pub fn discover_plugins(config_dir: &Path) -> Vec<Plugin> {
     let plugins_dir = config_dir.join("plugins");
     if !plugins_dir.exists() {
         return Vec::new();
@@ -54,7 +54,7 @@ pub fn discover_plugins(config_dir: &PathBuf) -> Vec<Plugin> {
 }
 
 /// Find a specific installed plugin by name.
-pub fn find_plugin(config_dir: &PathBuf, name: &str) -> Option<Plugin> {
+pub fn find_plugin(config_dir: &Path, name: &str) -> Option<Plugin> {
     discover_plugins(config_dir)
         .into_iter()
         .find(|p| p.manifest.meta.name == name)
