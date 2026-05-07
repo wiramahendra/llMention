@@ -26,10 +26,7 @@ impl MockProvider {
         let pattern = pattern.into();
         let response = response.into();
         let mut responses = self.responses.lock().unwrap();
-        responses
-            .entry(pattern)
-            .or_insert_with(Vec::new)
-            .push(response);
+        responses.entry(pattern).or_default().push(response);
         drop(responses);
         self
     }
@@ -55,7 +52,7 @@ impl MockProvider {
         // Try exact match first
         if let Some(resp) = responses.get(prompt) {
             return resp
-                .get(0)
+                .first()
                 .cloned()
                 .unwrap_or_else(|| self.default_response.clone());
         }
@@ -64,7 +61,7 @@ impl MockProvider {
         for (pattern, resp) in responses.iter() {
             if prompt.to_lowercase().contains(&pattern.to_lowercase()) {
                 return resp
-                    .get(0)
+                    .first()
                     .cloned()
                     .unwrap_or_else(|| self.default_response.clone());
             }
@@ -114,10 +111,9 @@ impl MockProviderBuilder {
 
     /// Add a response that doesn't mention the project
     pub fn does_not_mention(self, project: &str) -> Self {
-        let response = format!(
-            "For that use case, you might want to consider OtherTool or AnotherOption. \
+        let response = "For that use case, you might want to consider OtherTool or AnotherOption. \
              They are well-established solutions with good community support."
-        );
+            .to_string();
         self.with_response(project, response)
     }
 
