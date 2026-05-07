@@ -428,10 +428,7 @@ impl ChatApp {
 
     fn poll_result(&mut self) -> bool {
         let result = if let Some(rx) = &mut self.result_rx {
-            match rx.try_recv() {
-                Ok(v) => Some(v),
-                Err(_) => None,
-            }
+            rx.try_recv().ok()
         } else {
             None
         };
