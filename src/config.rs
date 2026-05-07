@@ -27,6 +27,7 @@ pub struct ProvidersConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProviderConfig {
+    #[serde(default)]
     pub api_key: String,
     pub model: String,
     #[serde(default = "default_true")]
@@ -87,7 +88,7 @@ impl Default for DefaultsConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct PluginsConfig {
     /// Names of installed plugins that are active by default.
     #[serde(default)]
@@ -95,15 +96,6 @@ pub struct PluginsConfig {
     /// Reserved for future auto-update support.
     #[serde(default)]
     pub auto_update: bool,
-}
-
-impl Default for PluginsConfig {
-    fn default() -> Self {
-        Self {
-            enabled_plugins: Vec::new(),
-            auto_update: false,
-        }
-    }
 }
 
 fn default_true() -> bool {
@@ -133,7 +125,18 @@ impl Config {
         }
         let contents = std::fs::read_to_string(&path)
             .with_context(|| format!("Failed to read config at {}", path.display()))?;
-        toml::from_str(&contents).with_context(|| "Failed to parse config.toml")
+        let mut config: Self =
+            toml::from_str(&contents).with_context(|| "Failed to parse config.toml")?;
+        config.apply_env_api_keys();
+        Ok(config)
+    }
+
+    fn apply_env_api_keys(&mut self) {
+        fill_api_key_from_env(&mut self.providers.openai, "OPENAI_API_KEY");
+        fill_api_key_from_env(&mut self.providers.anthropic, "ANTHROPIC_API_KEY");
+        fill_api_key_from_env(&mut self.providers.gemini, "GEMINI_API_KEY");
+        fill_api_key_from_env(&mut self.providers.xai, "XAI_API_KEY");
+        fill_api_key_from_env(&mut self.providers.perplexity, "PERPLEXITY_API_KEY");
     }
 
     pub fn config_dir() -> PathBuf {
@@ -151,6 +154,22 @@ impl Config {
             .with_context(|| format!("Failed to create config dir {}", dir.display()))?;
         std::fs::create_dir_all(dir.join("cache"))?;
         Ok((dir, is_new))
+    }
+}
+
+fn fill_api_key_from_env(provider: &mut Option<ProviderConfig>, env_var: &str) {
+    let Some(config) = provider.as_mut() else {
+        return;
+    };
+
+    if !config.api_key.trim().is_empty() {
+        return;
+    }
+
+    if let Ok(value) = std::env::var(env_var) {
+        if !value.trim().is_empty() {
+            config.api_key = value;
+        }
     }
 }
 
