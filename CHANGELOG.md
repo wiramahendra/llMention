@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Release Summary
 This is the first public release candidate for LLMention v0.3.0, featuring a completely normalized CLI with clean command names and an evidence-based workflow. The CLI has been stabilized with production-ready commands for project initialization, prompt discovery, multi-sample auditing, report generation, and content gap analysis.
 
+### Final Pre-Release Patch
+- Fixed release-blocking build and clippy warnings
+- Added cloud-provider audit notices before prompts are sent to external providers
+- Added provider-specific missing API key errors with environment variable and config guidance
+- Validated the release binary from a clean temporary directory with the mock provider workflow
+- Corrected validation language: real provider implementations were reviewed, but live provider tests remain pending until API keys are provided
+
 ### Changed
 - Promoted v0.2 evidence engine workflow to primary CLI commands
 - `init2` → `init`: Initialize project with llmention.toml
@@ -43,8 +50,8 @@ This is the first public release candidate for LLMention v0.3.0, featuring a com
 - **Results depend on prompt sets**: Visibility scores are only as comprehensive as your configured prompt sets
 - **Real improvement takes time**: Publishing content is step one; model retraining and indexing happens on varying schedules (days to months)
 - **Citation behavior varies significantly**: Different providers (OpenAI, Anthropic, Ollama) exhibit different citation patterns
-- **Mock provider is for testing only**: The mock provider validates workflows but does not measure actual visibility
-- **Cloud provider warnings**: Commands using real providers should warn that prompts will be sent to external APIs
+- **Mock provider is for testing only**: The mock provider validates workflows but does not measure actual visibility in real AI systems
+- **Live provider validation pending API keys**: OpenAI, Anthropic, xAI/Grok, Perplexity, and Gemini implementations were reviewed, but live tests require valid API keys
 
 ### Migration Notes
 If you were using the temporary `*2` commands from v0.2.x:
@@ -62,9 +69,11 @@ The old `*2` commands will continue to work with a deprecation warning.
 - [x] CHANGELOG.md updated
 - [x] README.md updated with new commands
 - [x] Documentation in docs/v0.2-evidence-engine-guide.md
-- [x] Code formatting checked (`cargo fmt`)
+- [x] Code formatting checked (`cargo fmt --check`)
+- [x] Clippy checked without warnings (`cargo clippy --all-targets --all-features`)
 - [x] Unit tests pass (`cargo test`)
 - [x] Binary builds successfully (`cargo build --release`)
+- [x] Release smoke test passes with mock provider
 - [ ] Git tag created: `git tag v0.3.0`
 - [ ] Git push with tags: `git push --tags`
 
