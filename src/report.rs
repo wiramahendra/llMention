@@ -33,7 +33,7 @@ pub fn print_summary(summary: &TrackSummary, prev_rate: Option<f64>) {
                     .red()
                     .to_string()
             } else {
-                format!("  (→ flat vs last run)").dimmed().to_string()
+                "  (→ flat vs last run)".dimmed().to_string()
             }
         }
         _ => String::new(),
