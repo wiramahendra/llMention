@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
 struct CacheEntry {
@@ -15,7 +15,7 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub fn new(base_dir: &PathBuf) -> Result<Self> {
+    pub fn new(base_dir: &Path) -> Result<Self> {
         let dir = base_dir.join("cache");
         std::fs::create_dir_all(&dir)?;
         Ok(Self { dir })
