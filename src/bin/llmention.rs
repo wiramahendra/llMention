@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use llmention::{
     agent::optimizer::{self, OptimizeOptions},
@@ -15,7 +15,7 @@ use llmention::{
         generator::{self, GenerateOptions},
         prompts::{self, extract_domain_hint},
     },
-    marketplace::{builtin, registry},
+    marketplace::builtin,
     plugins,
     project_config::ProjectConfig,
     prompt_discovery::PromptDiscovery,
@@ -477,6 +477,9 @@ enum Audit2Command {
         /// JSON output
         #[arg(long)]
         json: bool,
+        /// Acknowledge cloud-provider data transfer notice for scripts
+        #[arg(long)]
+        yes: bool,
     },
     /// List previous audit runs
     ///
@@ -607,6 +610,9 @@ enum AuditCommand {
         /// JSON output
         #[arg(long)]
         json: bool,
+        /// Acknowledge cloud-provider data transfer notice for scripts
+        #[arg(long)]
+        yes: bool,
     },
     /// List previous audit runs
     ///
@@ -975,7 +981,7 @@ async fn main() -> Result<()> {
 
         Commands::Projects { action } => {
             match action {
-                None | Some(ProjectAction::Add { .. }) if matches!(action, None) => {
+                None => {
                     // list
                     run_projects_list(&storage)?;
                 }
@@ -1002,7 +1008,6 @@ async fn main() -> Result<()> {
                         );
                     }
                 }
-                _ => run_projects_list(&storage)?,
             }
         }
 
@@ -1500,15 +1505,19 @@ async fn main() -> Result<()> {
                     temperature,
                     models,
                     json,
+                    yes,
                 } => {
                     run_audit_run(
                         &project,
                         &config,
                         &storage,
-                        samples,
-                        temperature,
-                        models,
-                        json,
+                        AuditRunRequest {
+                            samples,
+                            temperature,
+                            models,
+                            json,
+                            yes,
+                        },
                     )
                     .await?;
                 }
@@ -1625,206 +1634,227 @@ fn no_providers_error() -> ! {
     std::process::exit(1);
 }
 
-fn run_init() -> Result<()> {
-    use std::io::{self, BufRead, Write};
+const CLOUD_AUDIT_NOTICE: &str = "Notice: this audit will send prompts to the selected cloud provider using your configured API key. Project data and audit history remain local, but provider requests are processed by the selected provider.";
 
-    let (dir, _) = Config::ensure_dir()?;
-    let path = llmention::config::config_path();
+fn provider_display_name(provider: &str) -> &'static str {
+    match provider {
+        "openai" => "OpenAI",
+        "anthropic" => "Anthropic",
+        "gemini" | "google" => "Google Gemini",
+        "xai" | "grok" => "xAI/Grok",
+        "perplexity" => "Perplexity",
+        "mistral" => "Mistral",
+        _ => "Cloud provider",
+    }
+}
 
-    println!();
-    println!("{}", "LLMention Setup Wizard".bold());
-    println!("{}", "━".repeat(56).dimmed());
-    println!();
-    println!("  I'll help you configure at least one LLM provider.");
-    println!("  Press Enter to skip any provider.");
-    println!();
+fn provider_api_key_env(provider: &str) -> Option<&'static str> {
+    match provider {
+        "openai" => Some("OPENAI_API_KEY"),
+        "anthropic" => Some("ANTHROPIC_API_KEY"),
+        "gemini" | "google" => Some("GEMINI_API_KEY"),
+        "xai" | "grok" => Some("XAI_API_KEY"),
+        "perplexity" => Some("PERPLEXITY_API_KEY"),
+        "mistral" => Some("MISTRAL_API_KEY"),
+        _ => None,
+    }
+}
 
-    let stdin = io::stdin();
-    let mut lines = stdin.lock().lines();
+fn provider_config_path(provider: &str) -> &'static str {
+    match provider {
+        "openai" => "providers.openai.api_key",
+        "anthropic" => "providers.anthropic.api_key",
+        "gemini" | "google" => "providers.gemini.api_key",
+        "xai" | "grok" => "providers.xai.api_key",
+        "perplexity" => "providers.perplexity.api_key",
+        "mistral" => "providers.mistral.api_key",
+        _ => "providers.<name>.api_key",
+    }
+}
 
-    macro_rules! ask {
-        ($prompt:expr) => {{
-            print!("  {}", $prompt);
-            io::stdout().flush().ok();
-            lines
+fn normalize_provider_name(name: &str) -> &str {
+    match name {
+        "google" => "gemini",
+        "grok" => "xai",
+        other => other,
+    }
+}
+
+fn is_cloud_provider_name(name: &str) -> bool {
+    matches!(
+        normalize_provider_name(name),
+        "openai" | "anthropic" | "xai" | "gemini" | "perplexity" | "mistral"
+    )
+}
+
+fn is_missing_api_key(api_key: &str) -> bool {
+    let key = api_key.trim();
+    key.is_empty()
+        || matches!(
+            key,
+            "sk-..." | "sk-ant-..." | "AIza..." | "xai-..." | "pplx-..." | "..."
+        )
+}
+
+fn provider_config<'a>(
+    config: &'a Config,
+    provider: &str,
+) -> Option<&'a llmention::config::ProviderConfig> {
+    match normalize_provider_name(provider) {
+        "openai" => config.providers.openai.as_ref(),
+        "anthropic" => config.providers.anthropic.as_ref(),
+        "gemini" => config.providers.gemini.as_ref(),
+        "xai" => config.providers.xai.as_ref(),
+        "perplexity" => config.providers.perplexity.as_ref(),
+        _ => None,
+    }
+}
+
+fn selected_audit_provider_names(
+    project: &ProjectConfig,
+    global_config: &Config,
+    models: Option<&str>,
+) -> Vec<String> {
+    let mut names = Vec::new();
+
+    if let Some(filter) = models {
+        names.extend(
+            filter
+                .split(',')
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(|name| name.split(':').next().unwrap_or(name).to_lowercase()),
+        );
+    } else if !project.providers.models.is_empty() {
+        names.extend(project.providers.models.iter().filter_map(|model| {
+            model
+                .split(':')
                 .next()
-                .unwrap_or(Ok(String::new()))
-                .unwrap_or_default()
-                .trim()
-                .to_string()
-        }};
-    }
-
-    // ── OpenAI ───────────────────────────────────────────────────────────────
-    println!("  {}  OpenAI  (gpt-4o-mini)", "①".cyan());
-    let openai_key = ask!("  API key (sk-...): ");
-    let openai_block = if !openai_key.is_empty() {
-        format!(
-            "[providers.openai]\napi_key     = \"{}\"\nmodel       = \"gpt-4o-mini\"\nenabled     = true\ntemperature = 0\n",
-            openai_key
-        )
+                .filter(|name| !name.is_empty())
+                .map(|name| name.to_lowercase())
+        }));
     } else {
-        String::new()
-    };
-
-    // ── Anthropic ────────────────────────────────────────────────────────────
-    println!();
-    println!("  {}  Anthropic  (claude-3-5-haiku)", "②".cyan());
-    let anthropic_key = ask!("  API key (sk-ant-...): ");
-    let anthropic_block = if !anthropic_key.is_empty() {
-        format!(
-            "[providers.anthropic]\napi_key     = \"{}\"\nmodel       = \"claude-3-5-haiku-20241022\"\nenabled     = true\ntemperature = 0\n",
-            anthropic_key
-        )
-    } else {
-        String::new()
-    };
-
-    // ── Gemini ───────────────────────────────────────────────────────────────
-    println!();
-    println!(
-        "  {}  Google Gemini  (gemini-2.0-flash — includes AI Overviews context)",
-        "③".cyan()
-    );
-    let gemini_key = ask!("  API key (AIza...): ");
-    let gemini_block = if !gemini_key.is_empty() {
-        format!(
-            "[providers.gemini]\napi_key     = \"{}\"\nmodel       = \"gemini-2.0-flash\"\nenabled     = true\ntemperature = 0\n",
-            gemini_key
-        )
-    } else {
-        String::new()
-    };
-
-    // ── Ollama ───────────────────────────────────────────────────────────────
-    println!();
-    println!(
-        "  {}  Ollama  (local, free — requires ollama serve)",
-        "④".cyan()
-    );
-    let use_ollama = ask!("  Enable Ollama? [y/N]: ");
-    let ollama_model = if use_ollama.to_lowercase().starts_with('y') {
-        let m = ask!("  Model name [llama3.2]: ");
-        if m.is_empty() {
-            "llama3.2".to_string()
-        } else {
-            m
+        if global_config
+            .providers
+            .openai
+            .as_ref()
+            .is_some_and(|c| c.enabled)
+        {
+            names.push("openai".to_string());
         }
-    } else {
-        String::new()
-    };
-    let ollama_block = if !ollama_model.is_empty() {
-        format!(
-            "[providers.ollama]\nbase_url  = \"http://localhost:11434\"\nmodel     = \"{}\"\nenabled   = true\n",
-            ollama_model
-        )
-    } else {
-        String::new()
-    };
-
-    let any_configured = !openai_block.is_empty()
-        || !anthropic_block.is_empty()
-        || !gemini_block.is_empty()
-        || !ollama_block.is_empty();
-
-    if !any_configured {
-        println!();
-        println!(
-            "  {}  No providers configured. Edit {} manually to add keys.",
-            "!".yellow(),
-            path.display().to_string().cyan()
-        );
-        println!();
-        return Ok(());
-    }
-
-    // Build the config file
-    let mut content = String::from("# LLMention configuration — ~/.llmention/config.toml\n\n");
-    for block in [
-        &openai_block,
-        &anthropic_block,
-        &gemini_block,
-        &ollama_block,
-    ] {
-        if !block.is_empty() {
-            content.push_str(block);
-            content.push('\n');
+        if global_config
+            .providers
+            .anthropic
+            .as_ref()
+            .is_some_and(|c| c.enabled)
+        {
+            names.push("anthropic".to_string());
+        }
+        if global_config
+            .providers
+            .gemini
+            .as_ref()
+            .is_some_and(|c| c.enabled)
+        {
+            names.push("gemini".to_string());
+        }
+        if global_config
+            .providers
+            .xai
+            .as_ref()
+            .is_some_and(|c| c.enabled)
+        {
+            names.push("xai".to_string());
+        }
+        if global_config
+            .providers
+            .perplexity
+            .as_ref()
+            .is_some_and(|c| c.enabled)
+        {
+            names.push("perplexity".to_string());
+        }
+        if global_config
+            .providers
+            .ollama
+            .as_ref()
+            .is_some_and(|c| c.enabled)
+        {
+            names.push("ollama".to_string());
         }
     }
-    content.push_str("[judge]\nenabled   = false\nbase_url  = \"http://localhost:11434\"\nmodel     = \"llama3.2\"\n\n");
-    content.push_str("[defaults]\ndays        = 7\nconcurrency = 5\n");
 
-    std::fs::write(&path, &content)?;
+    names.sort();
+    names.dedup();
+    names
+}
 
-    println!();
-    println!(
-        "  {}  Config written to {}",
-        "✓".green().bold(),
-        path.display().to_string().cyan()
-    );
+fn is_local_ollama_url(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    lower.contains("://localhost")
+        || lower.contains("://127.0.0.1")
+        || lower.contains("://[::1]")
+        || lower.contains("://0.0.0.0")
+}
 
-    // ── First domain ─────────────────────────────────────────────────────────
-    println!();
-    println!("  {}  What domain do you want to track first?", "⑤".cyan());
-    let domain = ask!("  Domain (e.g. myproject.com): ");
-    let niche = if !domain.is_empty() {
-        ask!("  Niche (e.g. \"Rust CLI tool\"): ")
-    } else {
-        String::new()
-    };
+fn audit_uses_remote_ollama(selected: &[String], config: &Config) -> bool {
+    selected
+        .iter()
+        .any(|name| normalize_provider_name(name) == "ollama")
+        && config
+            .providers
+            .ollama
+            .as_ref()
+            .is_some_and(|c| !is_local_ollama_url(&c.base_url))
+}
 
-    println!();
-    println!("{}", "━".repeat(56).dimmed());
-    println!();
-    println!(
-        "  {}  Setup complete! Here's what to do next:",
-        "✓".green().bold()
-    );
-    println!();
+fn ensure_cloud_api_keys(selected: &[String], config: &Config) -> Result<()> {
+    for provider in selected {
+        let provider = normalize_provider_name(provider);
+        if !is_cloud_provider_name(provider) {
+            continue;
+        }
 
-    if !domain.is_empty() {
-        let niche_flag = if !niche.is_empty() {
-            format!(" --niche \"{}\"", niche)
-        } else {
-            String::new()
+        let Some(env_var) = provider_api_key_env(provider) else {
+            continue;
         };
-        println!("  {}  Run your first audit:", "1.".bold());
-        println!(
-            "      {}",
-            format!("llmention audit {}{}", domain, niche_flag).cyan()
-        );
-        println!();
-        println!(
-            "  {}  Run the optimizer (generates GEO content):",
-            "2.".bold()
-        );
-        println!(
-            "      {}",
-            format!("llmention optimize {}{} --auto-apply", domain, niche_flag).cyan()
-        );
+        let env_key_present = std::env::var(env_var)
+            .ok()
+            .is_some_and(|key| !is_missing_api_key(&key));
+        let missing = !env_key_present
+            && provider_config(config, provider)
+                .map(|c| is_missing_api_key(&c.api_key))
+                .unwrap_or(true);
 
-        // Save as a project
-        let storage = Storage::open(&dir)?;
-        let _ = storage.upsert_project(
-            &domain,
-            if niche.is_empty() {
-                None
-            } else {
-                Some(niche.as_str())
-            },
-            None,
-        );
-        println!();
-        println!("  {}  Saved {} as a project.", "✓".green(), domain.cyan());
-    } else {
-        println!(
-            "  {}  llmention audit <your-domain> --niche \"your niche\"",
-            "→".cyan()
-        );
+        if missing {
+            bail!(
+                "Missing {} API key. Set {} or configure {} in ~/.llmention/config.toml. For local testing without API keys, run: llmention audit run --models mock --samples 3",
+                provider_display_name(provider),
+                env_var,
+                provider_config_path(provider)
+            );
+        }
     }
 
-    println!();
     Ok(())
+}
+
+fn warn_cloud_audit_if_needed(selected: &[String], config: &Config, yes: bool) {
+    let uses_cloud = selected
+        .iter()
+        .any(|name| is_cloud_provider_name(name.as_str()));
+
+    if uses_cloud || audit_uses_remote_ollama(selected, config) {
+        eprintln!("\n  {}", CLOUD_AUDIT_NOTICE.yellow().bold());
+        if yes {
+            eprintln!("  Cloud notice acknowledged with {}.\n", "--yes".cyan());
+        } else {
+            eprintln!(
+                "  Pass {} to acknowledge this notice in scripts.\n",
+                "--yes".cyan()
+            );
+        }
+    }
 }
 
 fn run_config_command() -> Result<()> {
@@ -1893,7 +1923,7 @@ fn run_config_command() -> Result<()> {
     Ok(())
 }
 
-async fn run_doctor(config: &Config, base_dir: &PathBuf) -> Result<()> {
+async fn run_doctor(config: &Config, base_dir: &Path) -> Result<()> {
     println!();
     println!("{}", "LLMention Doctor".bold());
     println!("{}", "━".repeat(56).dimmed());
@@ -2079,28 +2109,20 @@ fn run_quickstart() -> Result<()> {
     println!("{}", "LLMention Quickstart".bold());
     println!("{}", "━".repeat(56).dimmed());
     println!();
-    println!("  {}  {}", "1.".bold().to_string(), "Create config".bold());
+    println!("  {}  {}", "1.".bold(), "Create config".bold());
     println!("      {}", "llmention config".cyan());
     println!();
     println!(
         "  {}  {}",
-        "2.".bold().to_string(),
+        "2.".bold(),
         "Add your API key (or enable Ollama for free)".bold()
     );
     println!("      {}", "Edit ~/.llmention/config.toml".cyan());
     println!();
-    println!(
-        "  {}  {}",
-        "3.".bold().to_string(),
-        "Verify your setup".bold()
-    );
+    println!("  {}  {}", "3.".bold(), "Verify your setup".bold());
     println!("      {}", "llmention doctor".cyan());
     println!();
-    println!(
-        "  {}  {}",
-        "4.".bold().to_string(),
-        "Run your first audit".bold()
-    );
+    println!("  {}  {}", "4.".bold(), "Run your first audit".bold());
     println!(
         "      {}",
         "llmention audit myproject.com --niche \"your niche\"".cyan()
@@ -2108,7 +2130,7 @@ fn run_quickstart() -> Result<()> {
     println!();
     println!(
         "  {}  {}",
-        "5.".bold().to_string(),
+        "5.".bold(),
         "Let the agent optimize (optional)".bold()
     );
     println!(
@@ -2151,7 +2173,7 @@ fn load_prompts(path: Option<PathBuf>, domain: &str) -> Result<Vec<String>> {
         Some(p) => {
             let contents = std::fs::read_to_string(&p)
                 .map_err(|e| anyhow::anyhow!("Cannot read prompts file {}: {}", p.display(), e))?;
-            if p.extension().map_or(false, |e| e == "json") {
+            if p.extension().is_some_and(|e| e == "json") {
                 serde_json::from_str(&contents)
                     .map_err(|e| anyhow::anyhow!("Invalid JSON in {}: {}", p.display(), e))
             } else {
@@ -2172,7 +2194,7 @@ fn audit_prompts(domain: &str, niche: Option<&str>, competitor: Option<&str>) ->
 
 /// Resolve a generate system prompt template from a named plugin.
 /// Checks installed plugins first, then falls back to builtins.
-fn resolve_generate_template(name: Option<&str>, config_dir: &PathBuf) -> Option<String> {
+fn resolve_generate_template(name: Option<&str>, config_dir: &Path) -> Option<String> {
     let name = name?;
     if let Some(plugin) = plugins::find_plugin(config_dir, name) {
         if let Some(tpl) = plugin.generate_template() {
@@ -2183,7 +2205,7 @@ fn resolve_generate_template(name: Option<&str>, config_dir: &PathBuf) -> Option
 }
 
 /// Resolve a discover system prompt template from a named plugin.
-fn resolve_discover_template(name: Option<&str>, config_dir: &PathBuf) -> Option<String> {
+fn resolve_discover_template(name: Option<&str>, config_dir: &Path) -> Option<String> {
     let name = name?;
     if let Some(plugin) = plugins::find_plugin(config_dir, name) {
         if let Some(tpl) = plugin.discover_template() {
@@ -2495,7 +2517,7 @@ fn run_prompts_list(project: &ProjectConfig, storage: &AuditStorage) -> Result<(
 }
 
 async fn run_prompts_templates(
-    base_dir: &PathBuf,
+    base_dir: &Path,
     template_cmd: PromptTemplatesCommand,
 ) -> Result<()> {
     use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
@@ -2617,14 +2639,19 @@ async fn run_prompts_templates(
     Ok(())
 }
 
-async fn run_audit_run(
-    project: &ProjectConfig,
-    global_config: &Config,
-    storage: &AuditStorage,
+struct AuditRunRequest {
     samples: Option<usize>,
     temperature: Option<f32>,
     models: Option<String>,
     json: bool,
+    yes: bool,
+}
+
+async fn run_audit_run(
+    project: &ProjectConfig,
+    global_config: &Config,
+    storage: &AuditStorage,
+    request: AuditRunRequest,
 ) -> Result<()> {
     // Get prompts
     let prompts = storage.list_prompts(&project.domain())?;
@@ -2637,8 +2664,13 @@ async fn run_audit_run(
         return Ok(());
     }
 
+    let selected_providers =
+        selected_audit_provider_names(project, global_config, request.models.as_deref());
+    ensure_cloud_api_keys(&selected_providers, global_config)?;
+    warn_cloud_audit_if_needed(&selected_providers, global_config, request.yes);
+
     // Build providers
-    let providers = if models.as_deref() == Some("mock") {
+    let providers = if request.models.as_deref() == Some("mock") {
         use llmention::providers::mock::MockProviderBuilder;
         vec![std::sync::Arc::new(
             MockProviderBuilder::new("mock")
@@ -2647,7 +2679,7 @@ async fn run_audit_run(
         )
             as std::sync::Arc<dyn llmention::providers::LlmProvider>]
     } else {
-        build_providers_for_project(&project.providers, global_config, models.as_deref())
+        build_providers_for_project(&project.providers, global_config, request.models.as_deref())
     };
 
     if providers.is_empty() {
@@ -2656,8 +2688,8 @@ async fn run_audit_run(
 
     // Build options
     let options = AuditOptions {
-        samples_per_prompt: samples.unwrap_or(project.audit.samples_per_prompt),
-        temperature: temperature.unwrap_or(project.audit.temperature),
+        samples_per_prompt: request.samples.unwrap_or(project.audit.samples_per_prompt),
+        temperature: request.temperature.unwrap_or(project.audit.temperature),
         store_raw_responses: project.audit.store_raw_responses,
         verbose: false,
         quiet: false,
@@ -2684,7 +2716,7 @@ async fn run_audit_run(
         .await?;
 
     // Output
-    if json {
+    if request.json {
         println!("{}", serde_json::to_string_pretty(&result.summary)?);
     } else {
         println!();
