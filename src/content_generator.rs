@@ -638,8 +638,7 @@ See https://llmstxt.org/ for the llms.txt specification.
         )
     }
 
-    /// Helper methods
-
+    /// Extract known competitors mentioned in generated text.
     fn extract_competitors(&self, text: &str, known_competitors: &[String]) -> Vec<String> {
         let text_lower = text.to_lowercase();
         known_competitors
