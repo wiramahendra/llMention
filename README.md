@@ -135,6 +135,8 @@ llmention optimize myproject.com --niche "Rust CLI tool" --auto-apply  # 5. impr
 
 > **Zero-cost option:** `ollama pull llama3.2` → set `enabled = true` under `[providers.ollama]` → use `--models ollama`
 
+The mock provider validates the local workflow, storage, reports, and generated files. It does not measure real AI visibility. Audits using cloud providers show a notice before prompts are sent to the selected provider with your configured API key.
+
 ---
 
 ## Evidence-First Workflow (Recommended)
